@@ -21,22 +21,6 @@
 #define MAX_CONNECTIONS 10
 #define MAX_BUFFER_LENGTH 325
 
-// global variables
-std::ofstream logFile;
-std::mutex mutex;
-int nextEventId;
-int serverSocketDesc;
-int clientSocketDesc;
-std::string msgToClient;
-char buff[MAX_BUFFER_LENGTH]; // https://moodle2.cs.huji.ac.il/nu15/mod/forum/discuss.php?d=48066
-// global data structures
-std::deque<std::thread> threadsDeque;
-std::deque<std::string> argsDeque;
-std::deque<int> newestEvents;
-std::map<int, Event*> eventIdToEvent;
-std::map<int, std::set<std::string>*> eventIdRSVPList;
-std::map<std::string, std::set<int>*> clientNameToEventId;
-
 typedef struct Event{
 public:
     std::string title;
@@ -57,7 +41,25 @@ public:
     }
 } Event;
 
-const std::string getDateFormat() const{
+// global variables
+std::ofstream logFile;
+std::mutex mutex;
+int nextEventId;
+int serverSocketDesc;
+int clientSocketDesc;
+std::string msgToClient;
+char buff[MAX_BUFFER_LENGTH]; // https://moodle2.cs.huji.ac.il/nu15/mod/forum/discuss.php?d=48066
+// global data structures
+std::deque<std::thread> threadsDeque;
+std::deque<std::string> argsDeque;
+std::deque<int> newestEvents;
+std::map<int, Event*> eventIdToEvent;
+std::map<int, std::set<std::string>*> eventIdRSVPList;
+std::map<std::string, std::set<int>*> clientNameToEventId;
+
+
+
+const std::string getDateFormat(){
     time_t time;
     char date[80];
     std::time(&time);
@@ -382,11 +384,11 @@ int main(int argc , char *argv[]) {
     threadsDeque.push_front(std::thread(readAndWriteToStream));
 
     //wait for the requests to finish their run
-    for (std::thread thread: threadsDeque){
-        thread.join();
+    for (std::thread& threadInDeque: threadsDeque){
+        threadInDeque.join();
     }
     // wait for the exit thread to finish
-    //todo exitThread.join();
+    exitThread.join();
 
     // close and clear delete resources with mutex lock
     std::unique_lock<std::mutex> bufferLock3(mutex); //lock
