@@ -2,12 +2,12 @@
 // Created by asaf on 6/7/16.
 //
 
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
-#include<sys/socket.h>
-#include<arpa/inet.h>
-#include<unistd.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -58,7 +58,6 @@ std::map<int, std::set<std::string>*> eventIdRSVPList;
 std::map<std::string, std::set<int>*> clientNameToEventId;
 
 
-
 const std::string getDateFormat(){
     time_t time;
     char date[80];
@@ -73,9 +72,12 @@ void putBufferInArgsDeque(){
     argsDeque.clear();
     std::string buffStr(buff);
     while (buffStr.length()){
-        size_t firstSpaceIdx = buffStr.find_first_of(" ");
+        size_t firstSpaceIdx = buffStr.find(" ");
         argsDeque.push_back(buffStr.substr(0, firstSpaceIdx));
         buffStr = buffStr.substr(firstSpaceIdx + 1); //todo check if works-correct
+        if (firstSpaceIdx == std::string::npos){ // mo matches
+            break;
+        }
     }
     // make command argument upper case
     std::transform(argsDeque[0].begin(), argsDeque[0].end(),
@@ -83,36 +85,40 @@ void putBufferInArgsDeque(){
 }
 
 void waitForExit(){
-    char userInput[512];
-    std::deque<std::string> _exit_args_queue;
+    std::string buffStr;
+    std::deque<std::string> exitArgsDeque;
 
     while (true){
-        std::this_thread::sleep_for(std::chrono::seconds(2));
         // todo implement case when server user input exit before any clients
         // todo connect
-        _exit_args_queue.clear();
-        std::string buffer_string(userInput);
-        while(buffer_string.length()) {
-            size_t space_index = buffer_string.find_first_of(" ");
-            _exit_args_queue.push_back(buffer_string.substr(0, space_index));
-            buffer_string = buffer_string.substr(space_index + 1);
+        exitArgsDeque.clear();
+        buffStr.clear();
+        std::cin>>buffStr;
+
+        while(buffStr.length()){
+            std::size_t firstSpaceIdx = buffStr.find(" ");
+            exitArgsDeque.push_back(buffStr.substr(0, firstSpaceIdx));
+            if (firstSpaceIdx == std::string::npos){ // no match
+                break;
+            }
+
+            buffStr = buffStr.substr(firstSpaceIdx + 1);
         }
 
-        std::transform(_exit_args_queue[0].begin(), _exit_args_queue[0].end(),
-                       _exit_args_queue[0].begin(), ::toupper);
+        std::transform(exitArgsDeque[0].begin(), exitArgsDeque[0].end(),
+                       exitArgsDeque[0].begin(), ::toupper);
 
-        if (_exit_args_queue.size() == 1 && _exit_args_queue[0].
+        if (exitArgsDeque.size() == 1 && !exitArgsDeque[0].
                 compare("EXIT")){
-            _exit_args_queue.clear();
-            logFile<<getDateFormat()<<"\t"<<"EXIT command is typed: server is"
-            " shutdown\n"; //todo check about date and \n
-            exit(0); //todo check if the whole logic of this function is what
-            // todo they desire
+            exitArgsDeque.clear();
+            logFile<<"EXIT command is typed: server is shutdown\n"; //todo check about date and \n
+            exit(EXIT_SUCCESS); //todo check if the whole logic of this function is what
+            // todo they desire - the thing about timeout also
         }
     }
 }
 
-void parseData(){
+void parseUserInput(){
     std::unique_lock<std::mutex> bufferLock(mutex);
     putBufferInArgsDeque();
 
@@ -129,7 +135,7 @@ void parseData(){
         clientName = argsDeque[1];
         if (clientNameToEventId.find(clientName) == clientNameToEventId.end()) {
             clientNameToEventId[clientName] = new std::set<int>();
-            msgToClient.append("GOOD$").append("Client").append(clientName)
+            msgToClient.append("GOOD$").append("Client ").append(clientName)
                     .append(" was registered successfully."); //todo is \n needed?
             logFile<<getDateFormat()<<"\t"<<clientName<<
                     "\twas registered successfully.\n";
@@ -306,9 +312,9 @@ void readAndWriteToStream(){
     //read part
     std::unique_lock<std::mutex> bufferLock1(mutex);
 
-    memset(buff, 0, strlen(buff));
+    memset(buff, 0, MAX_BUFFER_LENGTH);
 
-    auto bytesRead = read(clientSocketDesc, buff, strlen(buff));
+    auto bytesRead = read(clientSocketDesc, buff, MAX_BUFFER_LENGTH);
 
     if (bytesRead <= 0){
         logFile<<getDateFormat()<<"\tERROR\tread\t"<<errno<<".\n";
@@ -317,12 +323,12 @@ void readAndWriteToStream(){
     else{
         msgToClient.clear();
         bufferLock1.unlock();
-        parseData();
+        parseUserInput();
     }
 
     //write part
     std::unique_lock<std::mutex> bufferLock2(mutex);
-    if (write(clientSocketDesc, msgToClient.c_str(), strlen(buff)) < 0){
+    if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) < 0){
         logFile<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<".\n";
     }
     bufferLock2.unlock();
@@ -331,7 +337,7 @@ void readAndWriteToStream(){
 
 int main(int argc , char *argv[]) {
 
-    if (argc != NUMBER_OF_ARGS){
+    if (argc != NUMBER_OF_ARGS){ // todo add checks for usage
         std::cout<<"Usage: emServer portNum"<<std::endl;
         exit(EXIT_FAILURE);
     }
@@ -350,6 +356,7 @@ int main(int argc , char *argv[]) {
 
     // create a thread that will listen for the exit cmd on the server keyboard
     std::thread exitThread = std::thread(waitForExit);
+    exitThread.detach();
 
     std::unique_lock<std::mutex> bufferLock1(mutex); //locks
 
@@ -370,25 +377,25 @@ int main(int argc , char *argv[]) {
     //Listen
     listen(serverSocketDesc, MAX_CONNECTIONS);
 
-    std::unique_lock<std::mutex> bufferLock2(mutex); //lock
 
-    //Accept
-    clientSocketDesc = accept(serverSocketDesc,
-                              (struct sockaddr *) &cliAddr, &addressLength);
-    if (clientSocketDesc < 0){
-        logFile<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<".\n";
+    for (int i = 0; i < MAX_CONNECTIONS; i++){
+        std::unique_lock<std::mutex> bufferLock2(mutex); //lock
+        //Accept
+        clientSocketDesc = accept(serverSocketDesc,
+                                  (struct sockaddr *) &cliAddr, &addressLength);
+        if (clientSocketDesc < 0){
+            logFile<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<".\n";
+        }
+        bufferLock2.unlock();
+        //create a thread with the readAndWriteToStream function
+        // and push it into the deque
+        threadsDeque.push_front(std::thread(readAndWriteToStream));
     }
-    bufferLock2.unlock();
-
-    // create a thread with the readWrite function and push it into the deque
-    threadsDeque.push_front(std::thread(readAndWriteToStream));
 
     //wait for the requests to finish their run
     for (std::thread& threadInDeque: threadsDeque){
         threadInDeque.join();
     }
-    // wait for the exit thread to finish
-    exitThread.join();
 
     // close and clear delete resources with mutex lock
     std::unique_lock<std::mutex> bufferLock3(mutex); //lock
