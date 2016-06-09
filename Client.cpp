@@ -13,18 +13,21 @@
 #include <ctime>
 #include <deque>
 #include <algorithm>
+#include <mutex>
 
 #define NUMBER_OF_ARGS 4
 #define MAX_BUFFER_LENGTH 325
 
 // global variables
-std::ofstream logFile;
+std::ofstream* logFile;
 int port;
 struct hostent *serverIP;
 std::string clientName;
 std::string msgToServer;
 char buff[MAX_BUFFER_LENGTH];
 int clientSocketDesc;
+bool idle;
+bool wasRegistered;
 // global data structures
 std::deque<std::string> argsDeque;
 std::deque<std::string> responseArgsDeque;
@@ -58,9 +61,18 @@ const std::string getDateFormat(){ //todo move to aux file
     return std::string(date);
 }
 
+void destruct(){
+    close(clientSocketDesc);
+    responseArgsDeque.clear();
+    argsDeque.clear();
+    logFile->close();
+    delete(logFile);
+}
+
 void writeToStream(){
     if (write(clientSocketDesc, msgToServer.c_str(), msgToServer.length()) < 0){
-        logFile<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<".\n";
+        (*logFile)<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<".\n";
+        destruct();
         exit(EXIT_FAILURE);
     }
 }
@@ -69,11 +81,13 @@ void readFromStream(){
     memset(buff, 0, MAX_BUFFER_LENGTH);
 
     if (read(clientSocketDesc, buff, MAX_BUFFER_LENGTH) < 0){
-        logFile<<getDateFormat()<<"\tERROR\tread\t"<<errno<<".\n";
+        (*logFile)<<getDateFormat()<<"\tERROR\tread\t"<<errno<<".\n";
+        destruct();
         exit(EXIT_FAILURE);
     }
 
 }
+
 
 void parseResponse(){
     std::string buffStr(buff);
@@ -91,6 +105,7 @@ void parseResponse(){
 
 void parseUserInput(){
 
+    responseArgsDeque.clear();
     msgToServer.append(buff);
 
     putBufferInArgsDeque();
@@ -103,101 +118,145 @@ void parseUserInput(){
     if (command == "REGISTER"){
         if(argsDeque.size() > 1){
             for (size_t i = 1; i < argsDeque.size(); i++){
-                logFile<<"ERROR: invalid argument "<<
+                (*logFile)<<getDateFormat()<<"ERROR: invalid argument "<<
                         argsDeque[i]<< "in command REGISTER.\n";
             }
+            return; //todo check
         }
+        if (wasRegistered){
+            destruct();
+            exit(EXIT_FAILURE);
+        }
+        wasRegistered = true;
+
         writeToStream();
         readFromStream();
         parseResponse();
-        logFile<<getDateFormat()<<"\t"<<responseArgsDeque[1]<<std::endl;
+        (*logFile)<<getDateFormat()<<"\t"<<responseArgsDeque[1]<<std::endl;
 
         if (!responseArgsDeque[0].compare("EXIT")){
             // todo should i write to log?
+            destruct();
             exit(EXIT_FAILURE);
         }
     }
     else if (command == "CREATE"){
 
         if(argsDeque.size() < 4){
-            logFile<<"ERROR: missing arguments in command CREATE.\n";
+            (*logFile)<<"ERROR: missing arguments in command CREATE.\n";
+            return;
         }
         if (argsDeque.size() > 4){
             for (size_t i = 4; i < argsDeque.size(); i++){
-                logFile<<"ERROR: invalid argument "<<
+                (*logFile)<<"ERROR: invalid argument "<<
                         argsDeque[i]<<" in command CREATE.\n";
             }
+            return;
         }
+        if (!wasRegistered){
+            (*logFile)<<getDateFormat()<<"ERROR: first command must be:"
+                                                 " REGISTER.\n";
+            return;
+        }
+
         writeToStream();
         readFromStream();
         parseResponse();
-        logFile <<getDateFormat()<<"\t"<<responseArgsDeque[1]<<std::endl;
+        (*logFile) <<getDateFormat()<<"\t"<<responseArgsDeque[1]<<std::endl;
 
     }
     else if (command == "GET_TOP_5"){
 
         if(argsDeque.size() >  1){
             for (size_t i = 1; i < argsDeque.size(); i++){
-                logFile<<"ERROR: invalid argument "<<
+                (*logFile)<<"ERROR: invalid argument "<<
                         argsDeque[i]<<" in command GET_TOP_5.\n";
             }
+            return;
         }
+        if (!wasRegistered) {
+            (*logFile) << getDateFormat() << "ERROR: first command must be:"
+                    " REGISTER.\n";
+            return;
+        }
+
         writeToStream();
         readFromStream();
         parseResponse();
-        for(size_t i = 1; i < responseArgsDeque.size(); i++){
-            logFile<<getDateFormat()<<"\t"<<responseArgsDeque[i]<<std::endl;
+
+        // index zero is for GOOD "keyword"
+        (*logFile)<<getDateFormat()<<"\t"<<responseArgsDeque[1]<<std::endl;
+        for(size_t i = 2; i < responseArgsDeque.size(); i++){
+            (*logFile)<<responseArgsDeque[i]<<std::endl;
         }
     }
     else if (command == "SEND_RSVP"){
-        if(argsDeque.size() <  2){
-            logFile<<getDateFormat()<<"\t"<<
+        if (argsDeque.size() <  2){
+            (*logFile)<<getDateFormat()<<"\t"<<
             "ERROR: missing arguments in command SEND_RSVP.\n";
+            return;
         }
         if (argsDeque.size() > 2){
             for (size_t i = 2; i < argsDeque.size(); i++){
-                logFile<<getDateFormat()<< "\t"<<
+                (*logFile)<<getDateFormat()<< "\t"<<
                 "ERROR: invalid argument "<<
                         argsDeque[i]<<"in command SEND_RSVP.\n";
             }
+            return;
         }
+        if (!wasRegistered){
+            (*logFile)<<getDateFormat()<<"ERROR: first command must be:"
+                                                 " REGISTER.\n";
+            return;
+        }
+
 
         if (std::transform(argsDeque[1].begin(), argsDeque[1].end(),
                            argsDeque[1].begin(), ::isdigit)
                                                 != argsDeque[1].end()){
-            //error, change _msg_to_server
-            // TODO: error
+            (*logFile)<<getDateFormat()<<"\t"<<
+            				"ERROR: invalid argument "<<
+            				argsDeque[1]<<" in command GET_RSVP_LIST.\n";
+            //todo check spacing
         }
         writeToStream();
         readFromStream();
         parseResponse();
 
-        logFile<<getDateFormat()<<"\t"<<responseArgsDeque[1]<< std::endl;
+        (*logFile)<<getDateFormat()<<"\t"<<responseArgsDeque[1]<< std::endl;
     }
-    else if (command == "GET_RSVP_LIST"){
+    else if (command == "GET_RSVPS_LIST"){
 
         if(argsDeque.size() <  2){
-            logFile<<getDateFormat()<<"\t"<<
+            (*logFile)<<getDateFormat()<<"\t"<<
             "ERROR: missing arguments in command GET_RSVP_LIST.\n";
+            return;
         }
         if (argsDeque.size() > 2){
             for (size_t i = 2; i < argsDeque.size(); i++){
-                logFile<<getDateFormat()<<"\t"<<
+                (*logFile)<<getDateFormat()<<"\t"<<
                 "ERROR: invalid argument "<<
                         argsDeque[i]<< "in command GET_RSVP_LIST.\n";
             }
+            return;
         }
 
         if (std::transform(argsDeque[1].begin(), argsDeque[1].end(),
                 argsDeque[1].begin(), ::isdigit) != argsDeque[1].end()){
-            //error, change _msg_to_server
-            // TODO: error
+            (*logFile)<<getDateFormat()<<"\t"<<
+            				"ERROR: invalid argument " <<
+            				argsDeque[1]<<" in command GET_RSVP_LIST.\n";
+        }
+        if (!wasRegistered){
+            (*logFile)<<getDateFormat()<<"\t"<<
+            "ERROR: first command must be: REGISTER.\n";
+            return;
         }
         writeToStream();
         readFromStream();
         parseResponse();
 
-        logFile<<getDateFormat()<<"\t"<<responseArgsDeque[1]<<
+        (*logFile)<<getDateFormat()<<"\t"<<responseArgsDeque[1]<<
                 std::endl;
 
 
@@ -206,29 +265,33 @@ void parseUserInput(){
 
         if(argsDeque.size() >  1){
             for (size_t i = 1; i < argsDeque.size(); i++){
-                logFile<<getDateFormat()<<"\t"<<
+                (*logFile)<<getDateFormat()<<"\t"<<
                 "ERROR: invalid argument "<<
                 argsDeque[i]<< "in command UNREGISTER.\n";
             }
+            return;
+        }
+        if (!wasRegistered) {
+            (*logFile) << getDateFormat() << "\t" <<
+            "ERROR: first command must be: REGISTER.\n";
+            return;
         }
 
         writeToStream();
         readFromStream();
         parseResponse();
 
-        logFile<<getDateFormat()<<"\t"<<responseArgsDeque[1]<<std::endl;
+        (*logFile)<<getDateFormat()<<"\t"<<responseArgsDeque[1]<<std::endl;
 
-        if (responseArgsDeque[0].compare("GOOD")){ //todo check this
-
-            close(clientSocketDesc); //todo ?
-            logFile.close(); // todo ?
-
-            exit(0);
+        if (!responseArgsDeque[0].compare("GOOD")){ //todo check this
+            destruct();
+            exit(EXIT_SUCCESS);
         }
+        return;
 
     }
     else{
-        logFile<<getDateFormat()<<"\t"<<"ERROR: illegal command.\n";
+        (*logFile)<<getDateFormat()<<"\t"<<"ERROR: illegal command.\n";
     }
 
 }
@@ -246,12 +309,14 @@ int main(int argc , char *argv[])
     port = atoi(argv[3]);
 
     if (serverIP == NULL){
-        logFile<<getDateFormat()<<"\tERROR\tgethostbyname\t"<<errno<<".\n";
+        (*logFile)<<getDateFormat()<<"\tERROR\tgethostbyname\t"<<errno<<".\n";
+        close(clientSocketDesc);
         exit(EXIT_FAILURE);
     }
 
-    logFile.open(std::string(clientName).append("_").append(
-            getDateFormat()).append(".log"));
+    logFile = new std::ofstream;
+    (*logFile).open(std::string(clientName).append("_").append(
+            getDateFormat()).append(".log"), std::ios_base::app); //appends
 
     struct sockaddr_in serverAddr;
 
@@ -263,32 +328,50 @@ int main(int argc , char *argv[])
            (size_t) serverIP->h_length);
 
     msgToServer = "";
+    wasRegistered = false;
+    idle = true;
 
     // Socket
     clientSocketDesc = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocketDesc < 0){
-        logFile<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<".\n";
+        (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<".\n";
+        destruct();
         exit(EXIT_FAILURE);
     }
 
     // Connect
-    if (connect(clientSocketDesc, (struct sockaddr *) &serverAddr, sizeof
-            (sockaddr_in)) < 0){
-        logFile<<getDateFormat()<<"\tERROR\tconnect\t"<<errno<<".\n";
+    if (connect(clientSocketDesc, reinterpret_cast<struct sockaddr *>
+ (&serverAddr), sizeof(sockaddr_in)) < 0) {
+//    if (connect(clientSocketDesc, (struct sockaddr *) &serverAddr, sizeof
+//            (sockaddr_in)) < 0){
+        (*logFile)<<getDateFormat()<<"\tERROR\tconnect\t"<<errno<<".\n";
+        destruct();
         exit(EXIT_FAILURE);
     }
 
     while (true){
+        //std::cin.ignore();
+        msgToServer.clear();
+        argsDeque.clear();
+        //_idle = true;
         memset(buff, 0, MAX_BUFFER_LENGTH);
-        std::cin.get(buff, MAX_BUFFER_LENGTH);
 
+        while(strlen(buff) == 0){
+            if (idle){
+                std::cin.get(buff, MAX_BUFFER_LENGTH);
+                std::cin.ignore();
+//                idle = false;
+            }
+
+        }
+//        idle = false;
         parseUserInput();
     }
 
 
     //todo close socket and logfile
     close(clientSocketDesc);
-    logFile.close();
+    (*logFile).close();
 
     return 0;
 }

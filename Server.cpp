@@ -42,7 +42,7 @@ public:
 } Event;
 
 // global variables
-std::ofstream logFile;
+std::ofstream* logFile;
 std::mutex mutex;
 int nextEventId;
 int serverSocketDesc;
@@ -84,6 +84,38 @@ void putBufferInArgsDeque(){
                    argsDeque[0].begin(), ::toupper);
 }
 
+void destruct(){
+    // close and clear delete resources with mutex lock
+    std::unique_lock<std::mutex> bufferLock(mutex); //lock
+    msgToClient = "EXIT0";
+    if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) < 0){
+        (*logFile)<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<".\n";
+    }
+
+    close(clientSocketDesc);
+    close(serverSocketDesc);
+    argsDeque.clear();
+    newestEvents.clear();
+    for (auto& kv: eventIdToEvent){
+        delete(kv.second);
+    }
+    for (auto& kv: eventIdRSVPList){
+        kv.second->clear();
+        delete(kv.second);
+    }
+    for (auto& kv: clientNameToEventId){
+        kv.second->clear();
+        delete(kv.second);
+    }
+    eventIdToEvent.clear();
+    eventIdRSVPList.clear();
+    clientNameToEventId.clear();
+    (*logFile).close();
+    delete(logFile);
+    bufferLock.unlock();
+
+}
+
 void waitForExit(){
     std::string buffStr;
     std::deque<std::string> exitArgsDeque;
@@ -111,7 +143,8 @@ void waitForExit(){
         if (exitArgsDeque.size() == 1 && !exitArgsDeque[0].
                 compare("EXIT")){
             exitArgsDeque.clear();
-            logFile<<"EXIT command is typed: server is shutdown\n"; //todo check about date and \n
+            (*logFile)<<"EXIT command is typed: server is shutdown\n"; //todo check about date and \n
+            destruct();
             exit(EXIT_SUCCESS); //todo check if the whole logic of this function is what
             // todo they desire - the thing about timeout also
         }
@@ -137,12 +170,12 @@ void parseUserInput(){
             clientNameToEventId[clientName] = new std::set<int>();
             msgToClient.append("GOOD$").append("Client ").append(clientName)
                     .append(" was registered successfully."); //todo is \n needed?
-            logFile<<getDateFormat()<<"\t"<<clientName<<
+            (*logFile)<<getDateFormat()<<"\t"<<clientName<<
                     "\twas registered successfully.\n";
         } else {
-            msgToClient.append("EXIT$").append("Client ").append(clientName)
+            msgToClient.append("EXIT1$").append("Client ").append(clientName)
                     .append(" was already registered.");
-            logFile<<getDateFormat()<<"\t"<<"ERROR: "<< clientName <<"\tis "
+            (*logFile)<<getDateFormat()<<"\t"<<"ERROR: "<< clientName <<"\tis "
                                                         "already exists.\n";
         }
     }
@@ -170,7 +203,7 @@ void parseUserInput(){
                       (nextEventId)).append(" was created successfully.$");
         msgToClient.append(std::to_string((nextEventId)));
 
-        logFile<<getDateFormat()<<"\t"<<clientName<<"\tevent id "<<
+        (*logFile)<<getDateFormat()<<"\t"<<clientName<<"\tevent id "<<
                 nextEventId<<" was assigned to the event with title "<<
                 event->title<<".\n";
 
@@ -208,7 +241,7 @@ void parseUserInput(){
             }
         }
 
-        logFile<<getDateFormat()<<"\t"<<clientName<<
+        (*logFile)<<getDateFormat()<<"\t"<<clientName<<
         "\trequested the top 5 newest events.\n";
 
     }
@@ -245,7 +278,7 @@ void parseUserInput(){
                             " Event not found.");
         }
 
-        logFile<<getDateFormat()<<"\t"<<clientName<<
+        (*logFile)<<getDateFormat()<<"\t"<<clientName<<
         "\tis RSVP to event with id"<<eventId<<".\n";
 
     }
@@ -264,13 +297,18 @@ void parseUserInput(){
         if (eventIdRSVPList.find(eventId) != eventIdRSVPList.end()){
             msgToClient.append("The RSVP list for event id ")
                     .append(std::to_string(eventId)).append(" is: ");
+            size_t i = 0;
             for (auto& new_client_name: *eventIdRSVPList[eventId]) {
+                if ( i == eventIdRSVPList[eventId]->size() - 1){
+                    msgToClient.append(new_client_name).append(".");
+                    break;
+                }
                 msgToClient.append(new_client_name).append(",");
+                i++;
             }
-            msgToClient.append(".");
         }
 
-        logFile<<getDateFormat()<<"\t"<<clientName<<
+        (*logFile)<<getDateFormat()<<"\t"<<clientName<<
         "\trequests the RSVP's list for event with id "<<
         eventId<<".\n";
 
@@ -297,41 +335,44 @@ void parseUserInput(){
                 .append(clientName)
                 .append(" was unregistered successfully.");
 
-        logFile<<getDateFormat()<<"\t"<<clientName<<
+        (*logFile)<<getDateFormat()<<"\t"<<clientName<<
         "\twas unregistered successfully.\n";
 
     }
     else {
-        logFile<<getDateFormat()<<"\tERROR\tillegal command.\n";//todo-remove?
+        (*logFile)<<getDateFormat()<<"\tERROR\tillegal command.\n";//todo-remove?
     }
     bufferLock.unlock();
 }
 
 void readAndWriteToStream(){
+    while(true) {
+        //read part
+        std::unique_lock<std::mutex> bufferLock1(mutex);
 
-    //read part
-    std::unique_lock<std::mutex> bufferLock1(mutex);
+        memset(buff, 0, MAX_BUFFER_LENGTH);
 
-    memset(buff, 0, MAX_BUFFER_LENGTH);
+        auto bytesRead = read(clientSocketDesc, buff, MAX_BUFFER_LENGTH);
 
-    auto bytesRead = read(clientSocketDesc, buff, MAX_BUFFER_LENGTH);
-
-    if (bytesRead <= 0){
-        logFile<<getDateFormat()<<"\tERROR\tread\t"<<errno<<".\n";
         bufferLock1.unlock();
-    }
-    else{
-        msgToClient.clear();
-        bufferLock1.unlock();
-        parseUserInput();
-    }
+        if (bytesRead <= 0) {
+            (*logFile) << getDateFormat() << "\tERROR\tread\t" << errno <<
+            ".\n";
+        }
+        else {
+            msgToClient.clear();
+            parseUserInput();
+        }
 
-    //write part
-    std::unique_lock<std::mutex> bufferLock2(mutex);
-    if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) < 0){
-        logFile<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<".\n";
+        //write part
+        std::unique_lock<std::mutex> bufferLock2(mutex);
+        if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) <
+            0) {
+            (*logFile) << getDateFormat() << "\tERROR\twrite\t" << errno <<
+            ".\n";
+        }
+        bufferLock2.unlock();
     }
-    bufferLock2.unlock();
 }
 
 
@@ -346,7 +387,8 @@ int main(int argc , char *argv[]) {
     struct sockaddr_in serverAddr, cliAddr;
     socklen_t addressLength = sizeof(sockaddr_in);
 
-    logFile.open("emServer.log");
+    logFile = new std::ofstream;
+    (*logFile).open("emServer.log", std::ios_base::app); //append
 
     memset(&serverAddr, 0, addressLength);
 
@@ -356,21 +398,25 @@ int main(int argc , char *argv[]) {
 
     // create a thread that will listen for the exit cmd on the server keyboard
     std::thread exitThread = std::thread(waitForExit);
-    exitThread.detach();
+//    exitThread.detach();
 
     std::unique_lock<std::mutex> bufferLock1(mutex); //locks
 
     //Socket
     serverSocketDesc = socket(AF_INET , SOCK_STREAM , 0);
     if(serverSocketDesc < 0){
-        logFile<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<".\n";
+        (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<".\n";
     }
 
     //Bind
-    if( bind(serverSocketDesc,(struct sockaddr *)&serverAddr ,
+
+    if( bind(serverSocketDesc, reinterpret_cast<struct sockaddr *>(&serverAddr),
              sizeof(sockaddr_in))
         < 0) {
-        logFile<<getDateFormat()<<"\tERROR\tbind\t"<<errno<<".\n";
+//    if( bind(serverSocketDesc,(struct sockaddr *)&serverAddr ,
+//             sizeof(sockaddr_in))
+//        < 0) {
+        (*logFile)<<getDateFormat()<<"\tERROR\tbind\t"<<errno<<".\n";
     }
     bufferLock1.unlock();
 
@@ -381,44 +427,26 @@ int main(int argc , char *argv[]) {
     for (int i = 0; i < MAX_CONNECTIONS; i++){
         std::unique_lock<std::mutex> bufferLock2(mutex); //lock
         //Accept
-        clientSocketDesc = accept(serverSocketDesc,
-                                  (struct sockaddr *) &cliAddr, &addressLength);
+        clientSocketDesc = accept(serverSocketDesc, reinterpret_cast<struct sockaddr *>(&cliAddr), &addressLength);
+//        clientSocketDesc = accept(serverSocketDesc,
+//                                  (struct sockaddr *) &cliAddr, &addressLength);
         if (clientSocketDesc < 0){
-            logFile<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<".\n";
+            (*logFile)<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<".\n";
         }
         bufferLock2.unlock();
         //create a thread with the readAndWriteToStream function
         // and push it into the deque
         threadsDeque.push_front(std::thread(readAndWriteToStream));
+        threadsDeque.front().detach();
     }
 
     //wait for the requests to finish their run
     for (std::thread& threadInDeque: threadsDeque){
         threadInDeque.join();
     }
+    exitThread.join();
 
-    // close and clear delete resources with mutex lock
-    std::unique_lock<std::mutex> bufferLock3(mutex); //lock
-    close(clientSocketDesc);
-    close(serverSocketDesc);
-    argsDeque.clear();
-    newestEvents.clear();
-    for (auto& kv: eventIdToEvent){
-        delete(kv.second);
-    }
-    for (auto& kv: eventIdRSVPList){
-        kv.second->clear();
-        delete(kv.second);
-    }
-    for (auto& kv: clientNameToEventId){
-        kv.second->clear();
-        delete(kv.second);
-    }
-    eventIdToEvent.clear();
-    eventIdRSVPList.clear();
-    clientNameToEventId.clear();
-    logFile.close();
-    bufferLock3.unlock();
+    destruct();
 
     return 0;
 }
