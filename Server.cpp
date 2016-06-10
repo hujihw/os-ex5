@@ -42,13 +42,14 @@ public:
 } Event;
 
 // global variables
-std::ofstream* logFile;
+std::ofstream *logFile;
 std::mutex mutex;
 int nextEventId;
 int serverSocketDesc;
 int clientSocketDesc;
 std::string msgToClient;
 char buff[MAX_BUFFER_LENGTH]; // https://moodle2.cs.huji.ac.il/nu15/mod/forum/discuss.php?d=48066
+
 // global data structures
 std::deque<std::thread> threadsDeque;
 std::deque<std::string> argsDeque;
@@ -120,35 +121,43 @@ void waitForExit(){
     std::string buffStr;
     std::deque<std::string> exitArgsDeque;
 
-    while (true){
-        // todo implement case when server user input exit before any clients
-        // todo connect
-        exitArgsDeque.clear();
-        buffStr.clear();
-        std::cin>>buffStr;
+    std::cin >> buffStr;
 
-        while(buffStr.length()){
-            std::size_t firstSpaceIdx = buffStr.find(" ");
-            exitArgsDeque.push_back(buffStr.substr(0, firstSpaceIdx));
-            if (firstSpaceIdx == std::string::npos){ // no match
-                break;
-            }
-
-            buffStr = buffStr.substr(firstSpaceIdx + 1);
-        }
-
-        std::transform(exitArgsDeque[0].begin(), exitArgsDeque[0].end(),
-                       exitArgsDeque[0].begin(), ::toupper);
-
-        if (exitArgsDeque.size() == 1 && !exitArgsDeque[0].
-                compare("EXIT")){
-            exitArgsDeque.clear();
-            (*logFile)<<"EXIT command is typed: server is shutdown\n"; //todo check about date and \n
-            destruct();
-            exit(EXIT_SUCCESS); //todo check if the whole logic of this function is what
-            // todo they desire - the thing about timeout also
-        }
+    if (buffStr == "EXIT")
+    {
+        (*logFile) << "EXIT command is typed: server is shutdown" << std::endl;
+        exit(EXIT_SUCCESS);
     }
+
+//    while (true){
+//        // todo implement case when server user input exit before any clients
+//        // todo connect
+//        exitArgsDeque.clear();
+//        buffStr.clear();
+//        std::cin>>buffStr;
+//
+//        while(buffStr.length()){
+//            std::size_t firstSpaceIdx = buffStr.find(" ");
+//            exitArgsDeque.push_back(buffStr.substr(0, firstSpaceIdx));
+//            if (firstSpaceIdx == std::string::npos){ // no match
+//                break;
+//            }
+//
+//            buffStr = buffStr.substr(firstSpaceIdx + 1);
+//        }
+//
+//        std::transform(exitArgsDeque[0].begin(), exitArgsDeque[0].end(),
+//                       exitArgsDeque[0].begin(), ::toupper);
+//
+//        if (exitArgsDeque.size() == 1 && !exitArgsDeque[0].
+//                compare("EXIT")){
+//            exitArgsDeque.clear();
+//            (*logFile)<<"EXIT command is typed: server is shutdown\n"; //todo check about date and \n
+//            destruct();
+//            exit(EXIT_SUCCESS); //todo check if the whole logic of this function is what
+//            // todo they desire - the thing about timeout also
+//        }
+//    }
 }
 
 void parseUserInput(){
@@ -378,8 +387,8 @@ void readAndWriteToStream(){
 
 int main(int argc , char *argv[]) {
 
-    if (argc != NUMBER_OF_ARGS){ // todo add checks for usage
-        std::cout<<"Usage: emServer portNum"<<std::endl;
+    if (argc != NUMBER_OF_ARGS) { // todo add checks for usage
+        std::cout << "Usage: emServer portNum" << std::endl;
         exit(EXIT_FAILURE);
     }
     nextEventId = 1;
@@ -388,6 +397,7 @@ int main(int argc , char *argv[]) {
     socklen_t addressLength = sizeof(sockaddr_in);
 
     logFile = new std::ofstream;
+//    std::ofstream logFile;
     (*logFile).open("emServer.log", std::ios_base::app); //append
 
     memset(&serverAddr, 0, addressLength);
