@@ -43,7 +43,8 @@ public:
 
 // global variables
 std::ofstream* logFile;
-std::mutex mutex;
+std::mutex logMutex;
+std::mutex dastMutex; //todo write lock and unlock where needed
 int nextEventId;
 int serverSocketDesc;
 int clientSocketDesc;
@@ -85,11 +86,12 @@ void putBufferInArgsDeque(){
 }
 
 void destruct(){
-    // close and clear delete resources with mutex lock
-    std::unique_lock<std::mutex> bufferLock(mutex); //lock
+    // close and clear delete resources with logMutex lock
     msgToClient = "EXIT0";
     if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) < 0){
-        (*logFile)<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<".\n";
+        logMutex.lock();
+        (*logFile)<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<"."<<std::endl;
+        logMutex.unlock();
     }
 
     close(clientSocketDesc);
@@ -110,13 +112,16 @@ void destruct(){
     eventIdToEvent.clear();
     eventIdRSVPList.clear();
     clientNameToEventId.clear();
+    logMutex.lock();
     (*logFile).close();
     delete(logFile);
-    bufferLock.unlock();
+    logMutex.unlock();
+
 
 }
 
 void waitForExit(){
+    std::cout<<"in exit thread"<<std::endl; //todo remove
     std::string buffStr;
     std::deque<std::string> exitArgsDeque;
 
@@ -143,7 +148,9 @@ void waitForExit(){
         if (exitArgsDeque.size() == 1 && !exitArgsDeque[0].
                 compare("EXIT")){
             exitArgsDeque.clear();
-            (*logFile)<<"EXIT command is typed: server is shutdown\n"; //todo check about date and \n
+            logMutex.lock();
+            (*logFile)<<"EXIT command is typed: server is shutdown"<<std::endl; //todo check about date and \n
+            logMutex.unlock();
             destruct();
             exit(EXIT_SUCCESS); //todo check if the whole logic of this function is what
             // todo they desire - the thing about timeout also
@@ -152,10 +159,11 @@ void waitForExit(){
 }
 
 void parseUserInput(){
-    std::unique_lock<std::mutex> bufferLock(mutex);
+
     putBufferInArgsDeque();
 
     if (argsDeque.empty()){
+        std::cout<<"parse: empty"<<std::endl; //todo remove
         msgToClient.append("GOOD");
         return;
     }
@@ -165,21 +173,28 @@ void parseUserInput(){
     std::string command = argsDeque[0];
 
     if (command == "REGISTER"){
+        std::cout<<"parse: register"<<std::endl; //todo remove
         clientName = argsDeque[1];
         if (clientNameToEventId.find(clientName) == clientNameToEventId.end()) {
             clientNameToEventId[clientName] = new std::set<int>();
             msgToClient.append("GOOD$").append("Client ").append(clientName)
                     .append(" was registered successfully."); //todo is \n needed?
+            logMutex.lock();
             (*logFile)<<getDateFormat()<<"\t"<<clientName<<
-                    "\twas registered successfully.\n";
+                    "\twas registered successfully."<<std::endl;
+            logMutex.unlock();
+            
         } else {
             msgToClient.append("EXIT1$").append("Client ").append(clientName)
                     .append(" was already registered.");
+            logMutex.lock();
             (*logFile)<<getDateFormat()<<"\t"<<"ERROR: "<< clientName <<"\tis "
-                                                        "already exists.\n";
+                                                        "already exists."<<std::endl;
+            logMutex.unlock();
         }
     }
     else if (command == "CREATE"){
+        std::cout<<"parse: create"<<std::endl; //todo remove
         clientName = argsDeque[4];
         if (clientNameToEventId.find(clientName) == clientNameToEventId.end()) {
             msgToClient.append("ERROR$").append("ERROR: first command must be: "
@@ -202,15 +217,16 @@ void parseUserInput(){
         msgToClient.append("GOOD$").append("Event id ").append(std::to_string
                       (nextEventId)).append(" was created successfully.$");
         msgToClient.append(std::to_string((nextEventId)));
-
+        logMutex.lock();
         (*logFile)<<getDateFormat()<<"\t"<<clientName<<"\tevent id "<<
                 nextEventId<<" was assigned to the event with title "<<
-                event->title<<".\n";
+                event->title<<"."<<std::endl;
+        logMutex.unlock();
 
         nextEventId++;
     }
     else if (command == "GET_TOP_5"){
-
+        std::cout<<"parse: get top 5"<<std::endl; //todo remove
         clientName = argsDeque[1];
         size_t deque_size = newestEvents.size();
 
@@ -240,12 +256,14 @@ void parseUserInput(){
                 msgToClient.append("$");
             }
         }
-
+        logMutex.lock();
         (*logFile)<<getDateFormat()<<"\t"<<clientName<<
-        "\trequested the top 5 newest events.\n";
+        "\trequested the top 5 newest events."<<std::endl;
+        logMutex.unlock();
 
     }
     else if (command == "SEND_RSVP"){
+        std::cout<<"parse: send rsvp"<<std::endl; //todo remove
         clientName = argsDeque[2];
         eventId = atoi(argsDeque[1].c_str());
 
@@ -277,13 +295,14 @@ void parseUserInput(){
                     .append(std::to_string(eventId)).append(
                             " Event not found.");
         }
-
+        logMutex.lock();
         (*logFile)<<getDateFormat()<<"\t"<<clientName<<
-        "\tis RSVP to event with id"<<eventId<<".\n";
+        "\tis RSVP to event with id"<<eventId<<"."<<std::endl;
+        logMutex.unlock();
 
     }
     else if (command == "GET_RSVPS_LIST"){
-
+        std::cout<<"parse: get rsvps list"<<std::endl; //todo remove
         clientName = argsDeque[2];
         eventId = atoi(argsDeque[1].c_str());
 
@@ -307,14 +326,15 @@ void parseUserInput(){
                 i++;
             }
         }
-
+        logMutex.lock();
         (*logFile)<<getDateFormat()<<"\t"<<clientName<<
         "\trequests the RSVP's list for event with id "<<
-        eventId<<".\n";
+        eventId<<"."<<std::endl;
+        logMutex.unlock();
 
     }
     else if (command == "UNREGISTER"){
-
+        std::cout<<"parse: unregister"<<std::endl; //todo remove
         clientName = argsDeque[1];
 
         if (clientNameToEventId.find(clientName) == clientNameToEventId.end()) {
@@ -334,44 +354,58 @@ void parseUserInput(){
         msgToClient.append("GOOD$").append("Client ")
                 .append(clientName)
                 .append(" was unregistered successfully.");
-
+        logMutex.lock();
         (*logFile)<<getDateFormat()<<"\t"<<clientName<<
-        "\twas unregistered successfully.\n";
+        "\twas unregistered successfully."<<std::endl;
+        logMutex.unlock();
 
     }
     else {
-        (*logFile)<<getDateFormat()<<"\tERROR\tillegal command.\n";//todo-remove?
+        std::cout<<"parse: illegal"<<std::endl; //todo remove
+        logMutex.lock();
+        (*logFile)<<getDateFormat()<<"\tERROR\tillegal command."<<std::endl;//todo-remove?
+        logMutex.unlock();
     }
-    bufferLock.unlock();
+
 }
 
 void readAndWriteToStream(){
     while(true) {
+
+        std::cout<<"read from stream"<<std::endl; //todo remove
         //read part
-        std::unique_lock<std::mutex> bufferLock1(mutex);
+
 
         memset(buff, 0, MAX_BUFFER_LENGTH);
-
+        std::cout<<"read from stream: before read"<<std::endl; //todo remove
         auto bytesRead = read(clientSocketDesc, buff, MAX_BUFFER_LENGTH);
+        std::cout<<"read from stream: after read"<<std::endl; //todo remove
 
-        bufferLock1.unlock();
         if (bytesRead <= 0) {
+            std::cout<<"read from stream: didnt read bytes"<<std::endl;//todo-remove
+            logMutex.lock();
             (*logFile) << getDateFormat() << "\tERROR\tread\t" << errno <<
-            ".\n";
+            "."<<std::endl;
+            logMutex.unlock();
         }
         else {
+            std::cout<<"read from stream: in else"<<std::endl; //todo remove
             msgToClient.clear();
             parseUserInput();
         }
 
         //write part
-        std::unique_lock<std::mutex> bufferLock2(mutex);
+        std::cout<<"write to stream"<<std::endl; //todo remove
+
         if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) <
             0) {
+            logMutex.lock();
             (*logFile) << getDateFormat() << "\tERROR\twrite\t" << errno <<
-            ".\n";
+            "."<<std::endl;
+            logMutex.unlock();
         }
-        bufferLock2.unlock();
+
+
     }
 }
 
@@ -397,54 +431,64 @@ int main(int argc , char *argv[]) {
     serverAddr.sin_port = htons((uint16_t) port);
 
     // create a thread that will listen for the exit cmd on the server keyboard
-    std::thread exitThread = std::thread(waitForExit);
+//    std::cout<<"exit thread created"<<std::endl; //todo remove
+//    std::thread exitThread = std::thread(waitForExit); todo test
 //    exitThread.detach();
 
-    std::unique_lock<std::mutex> bufferLock1(mutex); //locks
+
 
     //Socket
+    std::cout<<"socket"<<std::endl; //todo remove
     serverSocketDesc = socket(AF_INET , SOCK_STREAM , 0);
     if(serverSocketDesc < 0){
-        (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<".\n";
+        logMutex.lock();
+        (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<"."<<std::endl;
+        logMutex.unlock();
     }
 
     //Bind
-
+    std::cout<<"bind"<<std::endl; //todo remove
     if( bind(serverSocketDesc, reinterpret_cast<struct sockaddr *>(&serverAddr),
              sizeof(sockaddr_in))
         < 0) {
 //    if( bind(serverSocketDesc,(struct sockaddr *)&serverAddr ,
 //             sizeof(sockaddr_in))
 //        < 0) {
-        (*logFile)<<getDateFormat()<<"\tERROR\tbind\t"<<errno<<".\n";
+        logMutex.lock();
+        (*logFile)<<getDateFormat()<<"\tERROR\tbind\t"<<errno<<"."<<std::endl;
+        logMutex.unlock();
     }
-    bufferLock1.unlock();
+
 
     //Listen
+    std::cout<<"listen"<<std::endl; //todo remove
     listen(serverSocketDesc, MAX_CONNECTIONS);
 
 
     for (int i = 0; i < MAX_CONNECTIONS; i++){
-        std::unique_lock<std::mutex> bufferLock2(mutex); //lock
         //Accept
+        std::cout<<"accept"<<std::endl; //todo remove
         clientSocketDesc = accept(serverSocketDesc, reinterpret_cast<struct sockaddr *>(&cliAddr), &addressLength);
 //        clientSocketDesc = accept(serverSocketDesc,
 //                                  (struct sockaddr *) &cliAddr, &addressLength);
         if (clientSocketDesc < 0){
-            (*logFile)<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<".\n";
+            logMutex.lock();
+            (*logFile)<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<"."<<std::endl;
+            logMutex.unlock();
         }
-        bufferLock2.unlock();
         //create a thread with the readAndWriteToStream function
         // and push it into the deque
+        std::cout<<"create connection thread"<<std::endl; //todo remove
         threadsDeque.push_front(std::thread(readAndWriteToStream));
-        threadsDeque.front().detach();
+//        threadsDeque.front().detach(); //todo test
     }
 
     //wait for the requests to finish their run
+    std::cout<<"join"<<std::endl; //todo remove
     for (std::thread& threadInDeque: threadsDeque){
         threadInDeque.join();
     }
-    exitThread.join();
+//    exitThread.join(); todo redo
 
     destruct();
 
