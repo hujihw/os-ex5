@@ -375,8 +375,8 @@ void readAndWriteToStream(){
 
         //write part
         std::unique_lock<std::mutex> bufferLock2(mutex);
-        if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) <
-            0) {
+        if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) < 0)
+        {
             (*logFile) << getDateFormat() << "\tERROR\twrite\t" << errno <<
             ".\n";
         }
@@ -387,42 +387,49 @@ void readAndWriteToStream(){
 
 int main(int argc , char *argv[]) {
 
+    // verify arguments are correct
     if (argc != NUMBER_OF_ARGS) { // todo add checks for usage
         std::cout << "Usage: emServer portNum" << std::endl;
         exit(EXIT_FAILURE);
     }
-    nextEventId = 1;
+
+    // convert given argument to an int
     int port = atoi(argv[1]);
+
+    // init socket addresses for the server
     struct sockaddr_in serverAddr, cliAddr;
-    socklen_t addressLength = sizeof(sockaddr_in);
+    socklen_t addressLength = sizeof(sockaddr_in); // todo what is this for?
 
-    logFile = new std::ofstream;
-//    std::ofstream logFile;
-    (*logFile).open("emServer.log", std::ios_base::app); //append
-
+    // zero the server address
     memset(&serverAddr, 0, addressLength);
 
     //Prepare the sockaddr_in structure
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons((uint16_t) port);
 
+    // init the ID of the first event
+    nextEventId = 1;
+
+    // open the log file
+    logFile = new std::ofstream;
+    (*logFile).open("emServer.log", std::ios_base::app); //append
+
     // create a thread that will listen for the exit cmd on the server keyboard
     std::thread exitThread = std::thread(waitForExit);
-//    exitThread.detach();
+//    exitThread.detach(); // todo remove?
 
-    std::unique_lock<std::mutex> bufferLock1(mutex); //locks
+    std::unique_lock<std::mutex> bufferLock1(mutex); //locks todo locks what?
 
-    //Socket
+    //create a socket for the server
     serverSocketDesc = socket(AF_INET , SOCK_STREAM , 0);
     if(serverSocketDesc < 0){
         (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<".\n";
     }
 
-    //Bind
-
+    //Bind it to the process
     if( bind(serverSocketDesc, reinterpret_cast<struct sockaddr *>(&serverAddr),
-             sizeof(sockaddr_in))
-        < 0) {
+             sizeof(sockaddr_in)) < 0)
+    {
 //    if( bind(serverSocketDesc,(struct sockaddr *)&serverAddr ,
 //             sizeof(sockaddr_in))
 //        < 0) {
@@ -430,27 +437,29 @@ int main(int argc , char *argv[]) {
     }
     bufferLock1.unlock();
 
-    //Listen
+    // Listen on the given port accepted from the user
     listen(serverSocketDesc, MAX_CONNECTIONS);
-
 
     for (int i = 0; i < MAX_CONNECTIONS; i++){
         std::unique_lock<std::mutex> bufferLock2(mutex); //lock
-        //Accept
+
+        //Accept a connection from a client
         clientSocketDesc = accept(serverSocketDesc, reinterpret_cast<struct sockaddr *>(&cliAddr), &addressLength);
-//        clientSocketDesc = accept(serverSocketDesc,
-//                                  (struct sockaddr *) &cliAddr, &addressLength);
+//        clientSocketDesc = accept(serverSocketDesc, (struct sockaddr *) &cliAddr, &addressLength); // todo remove?
+
         if (clientSocketDesc < 0){
             (*logFile)<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<".\n";
         }
+
         bufferLock2.unlock();
-        //create a thread with the readAndWriteToStream function
+
+        // create a thread with the readAndWriteToStream function
         // and push it into the deque
         threadsDeque.push_front(std::thread(readAndWriteToStream));
         threadsDeque.front().detach();
     }
 
-    //wait for the requests to finish their run
+    // wait for the requests to finish their run
     for (std::thread& threadInDeque: threadsDeque){
         threadInDeque.join();
     }
