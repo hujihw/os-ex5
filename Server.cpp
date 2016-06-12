@@ -47,11 +47,11 @@ std::mutex logMutex;
 std::mutex dastMutex; //todo write lock and unlock where needed
 int nextEventId;
 int serverSocketDesc;
-int clientSocketDesc;
 std::string msgToClient;
 char buff[MAX_BUFFER_LENGTH]; // https://moodle2.cs.huji.ac.il/nu15/mod/forum/discuss.php?d=48066
+bool doExit;
 // global data structures
-std::deque<std::thread> threadsDeque;
+std::deque<std::pair<int, std::thread>> threadsDeque;
 std::deque<std::string> argsDeque;
 std::deque<int> newestEvents;
 std::map<int, Event*> eventIdToEvent;
@@ -87,14 +87,17 @@ void putBufferInArgsDeque(){
 
 void destruct(){
     // close and clear delete resources with logMutex lock
-    msgToClient = "EXIT0";
-    if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) < 0){
-        logMutex.lock();
-        (*logFile)<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<"."<<std::endl;
-        logMutex.unlock();
+    msgToClient = "EXIT0"; //todo check was is required here- send exit to sockets or users?
+    for (auto& kv: threadsDeque){
+        if (write(kv.first, msgToClient.c_str(), MAX_BUFFER_LENGTH) < 0){
+            logMutex.lock();
+            (*logFile)<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<"."<<std::endl;
+            logMutex.unlock();
+        }
+
+        close(kv.first);
     }
 
-    close(clientSocketDesc);
     close(serverSocketDesc);
     argsDeque.clear();
     newestEvents.clear();
@@ -146,14 +149,14 @@ void waitForExit(){
                        exitArgsDeque[0].begin(), ::toupper);
 
         if (exitArgsDeque.size() == 1 && !exitArgsDeque[0].
-                compare("EXIT")){
+                compare("EXIT")){ //todo change ! to  == 0. in all places
             exitArgsDeque.clear();
             logMutex.lock();
             (*logFile)<<"EXIT command is typed: server is shutdown"<<std::endl; //todo check about date and \n
             logMutex.unlock();
-            destruct();
-            exit(EXIT_SUCCESS); //todo check if the whole logic of this function is what
-            // todo they desire - the thing about timeout also
+
+            doExit = true;
+            break;
         }
     }
 }
@@ -369,41 +372,41 @@ void parseUserInput(){
 
 }
 
-void readAndWriteToStream(){
-    while(true) {
-
-        std::cout<<"read from stream"<<std::endl; //todo remove
-        //read part
+void readAndWriteToStream(int clientSocketDesc){
 
 
-        memset(buff, 0, MAX_BUFFER_LENGTH);
-        std::cout<<"read from stream: before read"<<std::endl; //todo remove
-        auto bytesRead = read(clientSocketDesc, buff, MAX_BUFFER_LENGTH);
-        std::cout<<"read from stream: after read"<<std::endl; //todo remove
+    std::cout<<"read from stream"<<std::endl; //todo remove
+    //read part
 
-        if (bytesRead <= 0) {
-            std::cout<<"read from stream: didnt read bytes"<<std::endl;//todo-remove
-            logMutex.lock();
-            (*logFile) << getDateFormat() << "\tERROR\tread\t" << errno <<
-            "."<<std::endl;
-            logMutex.unlock();
-        }
-        else {
-            std::cout<<"read from stream: in else"<<std::endl; //todo remove
-            msgToClient.clear();
-            parseUserInput();
-        }
 
-        //write part
-        std::cout<<"write to stream"<<std::endl; //todo remove
+    memset(buff, 0, MAX_BUFFER_LENGTH);
+    std::cout<<"read from stream: before read"<<std::endl; //todo remove
+    auto bytesRead = read(clientSocketDesc, buff, MAX_BUFFER_LENGTH);
+    std::cout<<"read from stream: after read"<<std::endl; //todo remove
 
-        if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) <
-            0) {
-            logMutex.lock();
-            (*logFile) << getDateFormat() << "\tERROR\twrite\t" << errno <<
-            "."<<std::endl;
-            logMutex.unlock();
-        }
+    if (bytesRead <= 0) {
+        std::cout<<"read from stream: didnt read bytes"<<std::endl;//todo-remove
+        logMutex.lock();
+        (*logFile) << getDateFormat() << "\tERROR\tread\t" << errno <<
+        "."<<std::endl;
+        logMutex.unlock();
+    }
+    else {
+        std::cout<<"read from stream: in else"<<std::endl; //todo remove
+        msgToClient.clear();
+        parseUserInput();
+    }
+
+    //write part
+    std::cout<<"write to stream"<<std::endl; //todo remove
+
+    if (write(clientSocketDesc, msgToClient.c_str(), MAX_BUFFER_LENGTH) <
+        0) {
+        logMutex.lock();
+        (*logFile) << getDateFormat() << "\tERROR\twrite\t" << errno <<
+        "."<<std::endl;
+        logMutex.unlock();
+
 
 
     }
@@ -417,6 +420,7 @@ int main(int argc , char *argv[]) {
         exit(EXIT_FAILURE);
     }
     nextEventId = 1;
+    doExit = false;
     int port = atoi(argv[1]);
     struct sockaddr_in serverAddr, cliAddr;
     socklen_t addressLength = sizeof(sockaddr_in);
@@ -431,9 +435,9 @@ int main(int argc , char *argv[]) {
     serverAddr.sin_port = htons((uint16_t) port);
 
     // create a thread that will listen for the exit cmd on the server keyboard
-//    std::cout<<"exit thread created"<<std::endl; //todo remove
-//    std::thread exitThread = std::thread(waitForExit); todo test
-//    exitThread.detach();
+    std::cout<<"exit thread created"<<std::endl; //todo remove
+    std::thread exitThread = std::thread(waitForExit);
+    exitThread.detach();
 
 
 
@@ -465,10 +469,11 @@ int main(int argc , char *argv[]) {
     listen(serverSocketDesc, MAX_CONNECTIONS);
 
 
-    for (int i = 0; i < MAX_CONNECTIONS; i++){
+    while (!doExit){
         //Accept
         std::cout<<"accept"<<std::endl; //todo remove
-        clientSocketDesc = accept(serverSocketDesc, reinterpret_cast<struct sockaddr *>(&cliAddr), &addressLength);
+        int clientSocketDesc = accept(serverSocketDesc, reinterpret_cast<struct sockaddr *>
+        (&cliAddr), &addressLength);
 //        clientSocketDesc = accept(serverSocketDesc,
 //                                  (struct sockaddr *) &cliAddr, &addressLength);
         if (clientSocketDesc < 0){
@@ -479,16 +484,16 @@ int main(int argc , char *argv[]) {
         //create a thread with the readAndWriteToStream function
         // and push it into the deque
         std::cout<<"create connection thread"<<std::endl; //todo remove
-        threadsDeque.push_front(std::thread(readAndWriteToStream));
-//        threadsDeque.front().detach(); //todo test
+        std::thread readWriteThread(readAndWriteToStream);
+        auto threadPair  = std::pair<int, std::thread>(clientSocketDesc, readWriteThread);
+        threadsDeque.push_front(threadPair); //todo should we clear finished threads
     }
 
     //wait for the requests to finish their run
     std::cout<<"join"<<std::endl; //todo remove
-    for (std::thread& threadInDeque: threadsDeque){
-        threadInDeque.join();
+    for (auto& kv: threadsDeque){
+        kv.second.join();
     }
-//    exitThread.join(); todo redo
 
     destruct();
 
