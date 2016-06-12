@@ -26,8 +26,9 @@ std::string clientName;
 std::string msgToServer;
 char buff[MAX_BUFFER_LENGTH];
 int clientSocketDesc;
-bool idle;
-bool wasRegistered;
+bool registered;
+bool dontExit;
+
 // global data structures
 std::deque<std::string> argsDeque;
 std::deque<std::string> responseArgsDeque;
@@ -48,16 +49,23 @@ void putBufferInArgsDeque(){
                    argsDeque[0].begin(), ::toupper);
 }
 
-
-
-
-
-const std::string getDateFormat(){ //todo move to aux file
+const std::string getDateFormat()
+{ //todo move to aux file
     time_t time;
     char date[80];
     std::time(&time);
     struct tm* tm = localtime(&time);
     strftime(date, 80, "%H:%M:%S", tm);
+    return std::string(date);
+}
+
+const std::string logDateFormat()
+{
+    time_t time;
+    char date[80];
+    std::time(&time);
+    struct tm* tm = localtime(&time);
+    strftime(date, 80, "%H%M%S", tm);
     return std::string(date);
 }
 
@@ -70,12 +78,22 @@ void destruct(){
 }
 
 void writeToStream(){
-    std::cout<<"parse: write to stream"<<std::endl; //todo remove
+    // connect to server
+    if (connect(clientSocketDesc, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(sockaddr_in)) < 0) // todo get serverAddr
+    {
+        (*logFile)<<getDateFormat()<<"\tERROR\tconnect\t"<<errno<<"."<<std::endl;
+        destruct();
+        exit(EXIT_FAILURE);
+    }
+    std::cout<<"connected successfully"<<std::endl; //todo remove
+
+    // write command to stream
     if (write(clientSocketDesc, msgToServer.c_str(), msgToServer.length()) < 0){
         (*logFile)<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<"."<<std::endl;
         destruct();
         exit(EXIT_FAILURE);
     }
+    std::cout<<"parse: write to stream - success"<<std::endl; //todo remove
 }
 
 void readFromStream(){
@@ -90,7 +108,6 @@ void readFromStream(){
 
 }
 
-
 void parseResponse(){
     std::cout<<"parse: parse response"<<std::endl; //todo remove
     std::string buffStr(buff);
@@ -104,7 +121,6 @@ void parseResponse(){
         buffStr = buffStr.substr(dollarIdx + 1);
     }
 }
-
 
 void parseUserInput(){
 
@@ -127,11 +143,11 @@ void parseUserInput(){
             }
             return; //todo check
         }
-        if (wasRegistered){
+        if (registered){
             destruct();
             exit(EXIT_FAILURE);
         }
-        wasRegistered = true;
+        registered = true;
 
         writeToStream();
         readFromStream();
@@ -158,7 +174,7 @@ void parseUserInput(){
             }
             return;
         }
-        if (!wasRegistered){
+        if (!registered){
             (*logFile)<<getDateFormat()<<"ERROR: first command must be:"
                                                  " REGISTER."<<std::endl;
             return;
@@ -179,7 +195,7 @@ void parseUserInput(){
             }
             return;
         }
-        if (!wasRegistered) {
+        if (!registered) {
             (*logFile) << getDateFormat() << "ERROR: first command must be:"
                     " REGISTER."<<std::endl;
             return;
@@ -210,7 +226,7 @@ void parseUserInput(){
             }
             return;
         }
-        if (!wasRegistered){
+        if (!registered){
             (*logFile)<<getDateFormat()<<"ERROR: first command must be:"
                                                  " REGISTER."<<std::endl;
             return;
@@ -253,7 +269,7 @@ void parseUserInput(){
             				"ERROR: invalid argument " <<
             				argsDeque[1]<<" in command GET_RSVP_LIST."<<std::endl;
         }
-        if (!wasRegistered){
+        if (!registered){
             (*logFile)<<getDateFormat()<<"\t"<<
             "ERROR: first command must be: REGISTER."<<std::endl;
             return;
@@ -277,7 +293,7 @@ void parseUserInput(){
             }
             return;
         }
-        if (!wasRegistered) {
+        if (!registered) {
             (*logFile) << getDateFormat() << "\t" <<
             "ERROR: first command must be: REGISTER."<<std::endl;
             return;
@@ -313,11 +329,14 @@ int main(int argc , char *argv[])
 
     clientName = argv[1];
     serverIP = gethostbyname(argv[2]);
-    port = atoi(argv[3]);
+    port = atoi(argv[3]); // todo vrify in range 0 to 65535
 
     logFile = new std::ofstream;
-    (*logFile).open(std::string(clientName).append("_").append(
-            getDateFormat()).append(".log"), std::ios_base::app); //appends
+    std::string logName = std::string(clientName).append("_").append(
+            logDateFormat()).append(".log");
+
+    // open logfile and append
+    (*logFile).open(logName.c_str(), std::ios_base::app);
 
     if (serverIP == NULL){
         (*logFile)<<getDateFormat()<<"\tERROR\tgethostbyname\t"<<errno<<"."<<std::endl;
@@ -335,51 +354,34 @@ int main(int argc , char *argv[])
            (size_t) serverIP->h_length);
 
     msgToServer = "";
-    wasRegistered = false;
-    idle = true;
+    registered = false;
+//    idle = true;
+    dontExit = true;
 
-    // Socket
-    std::cout<<"socket"<<std::endl; //todo remove
+    // create socket
     clientSocketDesc = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocketDesc < 0){
         (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<"."<<std::endl;
         destruct();
         exit(EXIT_FAILURE);
     }
+    std::cout<<"socket created"<<std::endl; //todo remove
 
-    // Connect
-    std::cout<<"connect"<<std::endl; //todo remove
-    if (connect(clientSocketDesc, reinterpret_cast<struct sockaddr *>
- (&serverAddr), sizeof(sockaddr_in)) < 0) {
-//    if (connect(clientSocketDesc, (struct sockaddr *) &serverAddr, sizeof
-//            (sockaddr_in)) < 0){
-        (*logFile)<<getDateFormat()<<"\tERROR\tconnect\t"<<errno<<"."<<std::endl;
-        destruct();
-        exit(EXIT_FAILURE);
-    }
-
-    while (true){
-        std::cout<<"in while loop"<<std::endl; //todo remove
-        //std::cin.ignore();
+    while (dontExit){
+        std::cout << "waiting for input" << std::endl; //todo remove
         msgToServer.clear();
         argsDeque.clear();
-        idle = true;
+
         memset(buff, 0, MAX_BUFFER_LENGTH);
 
-        while(strlen(buff) == 0){
-            if (idle){
-                std::cin.get(buff, MAX_BUFFER_LENGTH);
-                std::cin.ignore();
-//                idle = false;
-            }
+//        std::cin.get(buff, MAX_BUFFER_LENGTH); // todo remove if not needed
+//        std::cin.ignore();
 
-        }
-//        idle = false;
+        std::cin >> buff; // todo verify input length
+
         parseUserInput();
     }
 
-
-    //todo close socket and logfile
     close(clientSocketDesc);
     (*logFile).close();
 
