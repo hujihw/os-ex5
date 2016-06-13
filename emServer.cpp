@@ -47,7 +47,7 @@ public:
 // global variables
 std::ofstream* logFile;
 std::mutex logMutex;
-std::mutex dastMutex; //todo write lock and unlock where needed
+std::mutex dastMutex;
 int nextEventId;
 int serverSocketDesc;
 bool doExit;
