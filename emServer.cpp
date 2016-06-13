@@ -1,7 +1,3 @@
-//
-// Created by asaf on 6/7/16.
-//
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -19,7 +15,7 @@
 
 #define NUMBER_OF_ARGS 2
 #define MAX_CONNECTIONS 10
-#define MAX_BUFFER_LENGTH 2000
+#define MAX_BUFFER_LENGTH 3250
 #define MAX_DATE_LEN 30
 #define MIN_PORT_NUM 1
 #define MAX_PORT_NUM 65535
@@ -250,8 +246,6 @@ std::string parseUserInput(char * buff){
         std::unique_lock<std::mutex> dastLock2(dastMutex); //locks (unlocks also when scope ends!)
         msgToClient.append("GOOD$").append("Top 5 newest events are:\n");
         for (size_t i = 0; i < deque_size; ++i) {
-            std::cout<<"the event desc:"<<std::endl; //todo remove
-            std::cout<<eventIdToEvent[newestEvents[i]]->description<<std::endl; //todo remove
             (msgToClient.append(std::to_string(newestEvents[i]))).append("\t");
             (msgToClient.append(eventIdToEvent[newestEvents[i]]->title))
                     .append("\t");
