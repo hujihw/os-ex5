@@ -16,7 +16,7 @@
 #include <mutex>
 
 #define NUMBER_OF_ARGS 4
-#define MAX_BUFFER_LENGTH 325
+#define MAX_BUFFER_LENGTH 2000
 
 // global variables
 std::ofstream* logFile;

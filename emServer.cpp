@@ -19,7 +19,7 @@
 
 #define NUMBER_OF_ARGS 2
 #define MAX_CONNECTIONS 10
-#define MAX_BUFFER_LENGTH 325
+#define MAX_BUFFER_LENGTH 2000
 #define MAX_DATE_LEN 30
 #define MIN_PORT_NUM 1
 #define MAX_PORT_NUM 65535
@@ -145,7 +145,7 @@ void waitForExit(){
             std::cout<<"in if of waitForExit"<<std::endl; //todo remove
             exitArgsDeque.clear();
             logMutex.lock();
-            (*logFile)<<"EXIT command is typed: server is shutdown"<<std::endl;
+            (*logFile)<<getDateFormat()<<"\tEXIT command is typed: server is shutdown."<<std::endl;
             logMutex.unlock();
 
             doExit = true;
@@ -250,6 +250,8 @@ std::string parseUserInput(char * buff){
         std::unique_lock<std::mutex> dastLock2(dastMutex); //locks (unlocks also when scope ends!)
         msgToClient.append("GOOD$").append("Top 5 newest events are:\n");
         for (size_t i = 0; i < deque_size; ++i) {
+            std::cout<<"the event desc:"<<std::endl; //todo remove
+            std::cout<<eventIdToEvent[newestEvents[i]]->description<<std::endl; //todo remove
             (msgToClient.append(std::to_string(newestEvents[i]))).append("\t");
             (msgToClient.append(eventIdToEvent[newestEvents[i]]->title))
                     .append("\t");
@@ -264,7 +266,7 @@ std::string parseUserInput(char * buff){
         dastLock2.unlock();
         logMutex.lock();
         (*logFile)<<getDateFormat()<<"\t"<<clientName<<
-        "\trequested the top 5 newest events."<<std::endl;
+        "\trequests the top 5 newest events."<<std::endl;
         logMutex.unlock();
 
     }
@@ -304,7 +306,7 @@ std::string parseUserInput(char * buff){
         }
         logMutex.lock();
         (*logFile)<<getDateFormat()<<"\t"<<clientName<<
-        "\tis RSVP to event with id"<<eventId<<"."<<std::endl;
+        "\tis RSVP to event with id "<<eventId<<"."<<std::endl;
         logMutex.unlock();
 
     }
@@ -322,7 +324,7 @@ std::string parseUserInput(char * buff){
 
         msgToClient.append("GOOD$");
         if (eventIdRSVPList.find(eventId) != eventIdRSVPList.end()){
-            msgToClient.append("The RSVP list for event id ")
+            msgToClient.append("The RSVP’s list for event id ")
                     .append(std::to_string(eventId)).append(" is: ");
             size_t i = 0;
             for (auto& new_client_name: *eventIdRSVPList[eventId]) {
@@ -337,7 +339,7 @@ std::string parseUserInput(char * buff){
         dastLock.unlock();
         logMutex.lock();
         (*logFile)<<getDateFormat()<<"\t"<<clientName<<
-        "\trequests the RSVP's list for event with id "<<
+        "\trequests the RSVP’s list for event with id "<<
         eventId<<"."<<std::endl;
         logMutex.unlock();
 
