@@ -16,7 +16,7 @@
 #include <mutex>
 
 #define NUMBER_OF_ARGS 4
-#define MAX_BUFFER_LENGTH 325
+#define MAX_BUFFER_LENGTH 3250
 
 // global variables
 std::ofstream* logFile;
@@ -34,7 +34,8 @@ bool dontExit;
 std::deque<std::string> argsDeque;
 std::deque<std::string> responseArgsDeque;
 
-void putBufferInArgsDeque(){
+void putBufferInArgsDeque()
+{
     argsDeque.clear();
     std::string buffStr(buff);
     while (buffStr.length()){
@@ -132,7 +133,8 @@ void readFromStream(){
     std::cout << "closed socket after read: " << closed << std::endl; // todo remove
 }
 
-void parseResponse(){
+void parseResponse()
+{
     std::cout<<"parse: parse response"<<std::endl; //todo remove
     std::string buffStr(buff);
 
@@ -153,6 +155,7 @@ void parseUserInput()
 
     putBufferInArgsDeque();
 
+    // append the client name to the end of the command to the server
     msgToServer.append(" ");
     msgToServer.append(clientName);
 
@@ -165,23 +168,35 @@ void parseUserInput()
                 (*logFile)<<getDateFormat()<<"ERROR: invalid argument "<<
                         argsDeque[i]<< "in command REGISTER."<<std::endl;
             }
-            return; //todo check
+            return; //todo change
         }
-        if (registered){
-//            destruct();
-//            exit(EXIT_FAILURE);
+        if (!registered)
+        {
+            writeToStream();
+            readFromStream();
+            parseResponse();
+            (*logFile) << getDateFormat() << "\t"
+            << responseArgsDeque[1] << std::endl;
+
+            if (responseArgsDeque[0].compare("EXIT1") == 0)
+            {
+                std::cout << "AHA!" << std::endl; // todo remove
+                destruct();
+                exit(EXIT_FAILURE);
+            }
+            else if (responseArgsDeque[0].compare("ERROR") == 0)
+            {
+
+            }
+            else
+            {
+                registered = true;
+            }
         }
-        registered = true;
-
-        writeToStream();
-        readFromStream();
-        parseResponse();
-        (*logFile)<<getDateFormat()<<"\t"<<responseArgsDeque[1]<<std::endl;
-
-        if (!responseArgsDeque[0].compare("EXIT")){
-            // todo should i write to log?
-            destruct();
-            exit(EXIT_FAILURE);
+        else
+        {
+            (*logFile) << getDateFormat() << "\tERROR: the client "
+            << clientName << " was already registered." << std::endl;
         }
     }
     else if (command == "CREATE"){
@@ -199,8 +214,8 @@ void parseUserInput()
             return;
         }
         if (!registered){
-            (*logFile)<<getDateFormat()<<"ERROR: first command must be:"
-                                                 " REGISTER."<<std::endl;
+            (*logFile) << getDateFormat()
+            << "\tERROR: first command must be: REGISTER." << std::endl;
             return;
         }
 
