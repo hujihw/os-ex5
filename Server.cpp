@@ -20,7 +20,9 @@
 #define NUMBER_OF_ARGS 2
 #define MAX_CONNECTIONS 10
 #define MAX_BUFFER_LENGTH 325
-#define MAx_DATE_LEN 80
+#define MAX_DATE_LEN 30
+#define MIN_PORT_NUM 1
+#define MAX_PORT_NUM 65535
 
 typedef struct Event{
 public:
@@ -59,10 +61,10 @@ std::map<std::string, std::set<int>*> clientNameToEventId;
 
 const std::string getDateFormat(){
     time_t time;
-    char date[MAx_DATE_LEN];
+    char date[MAX_DATE_LEN+1];
     std::time(&time);
     struct tm* tm = localtime(&time);
-    strftime(date, MAx_DATE_LEN, "%H:%M:%S", tm);
+    strftime(date, MAX_DATE_LEN, "%H:%M:%S", tm);
     return std::string(date);
 }
 
@@ -84,17 +86,6 @@ void putBufferInArgsDeque(std::deque<std::string>& argsDeque, char * buff){
 }
 
 void destruct(){
-    // close and clear delete resources with logMutex lock
-//    msgToClient = "EXIT0"; //todo check was is required here- send exit to sockets or users?
-//    for (auto& someThread: threadsDeque){
-//        if (write(kv.first, msgToClient.c_str(), MAX_BUFFER_LENGTH) < 0){
-//            logMutex.lock();
-//            (*logFile)<<getDateFormat()<<"\tERROR\twrite\t"<<errno<<"."<<std::endl;
-//            logMutex.unlock();  //todo see https://moodle2.cs.huji.ac.il/nu15/mod/forum/discuss.php?d=48380
-//        }
-
-//        close(someThread); //todo test
-//    }
 
     close(serverSocketDesc);
     newestEvents.clear();
@@ -130,7 +121,8 @@ void waitForExit(){
         buffStr.clear();
         std::cin>>buffStr;
 
-        while(buffStr.length()){
+        while (buffStr.length()){
+            std::cout<<"in inner while of exit thread"<<std::endl; //todo remove
             std::size_t firstSpaceIdx = buffStr.find(" ");
             exitArgsDeque.push_back(buffStr.substr(0, firstSpaceIdx));
             if (firstSpaceIdx == std::string::npos){ // no match
@@ -145,9 +137,10 @@ void waitForExit(){
 
         if (exitArgsDeque.size() == 1 && exitArgsDeque[0].
                 compare("EXIT") == 0){
+            std::cout<<"in if of exit thread"<<std::endl; //todo remove
             exitArgsDeque.clear();
             logMutex.lock();
-            (*logFile)<<"EXIT command is typed: server is shutdown"<<std::endl; //todo check about date and \n
+            (*logFile)<<"EXIT command is typed: server is shutdown"<<std::endl;
             logMutex.unlock();
 
             doExit = true;
@@ -384,10 +377,9 @@ std::string parseUserInput(char * buff){
 
 void readAndWriteToStream(int clientSocketDesc){
 
-
     std::cout<<"read from stream"<<std::endl; //todo remove
     //read part
-    char buff[MAX_BUFFER_LENGTH]; //https://moodle2.cs.huji.ac.il/nu15/mod/forum/discuss.php?d=48066
+    char buff[MAX_BUFFER_LENGTH+1]; //https://moodle2.cs.huji.ac.il/nu15/mod/forum/discuss.php?d=48066
     std::string msgToClient;
 
     memset(buff, 0, MAX_BUFFER_LENGTH); //todo check if still needed?
@@ -418,16 +410,16 @@ void readAndWriteToStream(int clientSocketDesc){
         "."<<std::endl;
         logMutex.unlock();
 
-
-
     }
+    close(clientSocketDesc);
 }
 
 
 int main(int argc , char *argv[]) {
 
-    if (argc != NUMBER_OF_ARGS){ // todo add checks for usage
-        std::cout<<"Usage: emServer portNum"<<std::endl;
+    if (argc != NUMBER_OF_ARGS || MIN_PORT_NUM > atoi(argv[1]) || atoi(argv[1]) > MAX_PORT_NUM) {
+
+        std::cout << "Usage: emServer portNum" << std::endl;
         exit(EXIT_FAILURE);
     }
     nextEventId = 1;
@@ -446,47 +438,62 @@ int main(int argc , char *argv[]) {
     serverAddr.sin_port = htons((uint16_t) port);
 
     // create a thread that will listen for the exit cmd on the server keyboard
-    std::cout<<"exit thread created"<<std::endl; //todo remove
+    std::cout << "exit thread created" << std::endl; //todo remove
     std::thread exitThread = std::thread(waitForExit);
-    exitThread.detach();
+
 
 
 
     //Socket
-    std::cout<<"socket"<<std::endl; //todo remove
-    serverSocketDesc = socket(AF_INET , SOCK_STREAM , 0);
-    if(serverSocketDesc < 0){
+    std::cout << "socket" << std::endl; //todo remove
+    serverSocketDesc = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocketDesc < 0) {
         logMutex.lock();
-        (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<"."<<std::endl;
+        (*logFile) << getDateFormat() << "\tERROR\tsocket\t" << errno << "." << std::endl;
         logMutex.unlock();
     }
 
     //Bind
-    std::cout<<"bind"<<std::endl; //todo remove
-    if( bind(serverSocketDesc, reinterpret_cast<struct sockaddr *>(&serverAddr),
+    std::cout << "bind" << std::endl; //todo remove
+    if (bind(serverSocketDesc, reinterpret_cast<struct sockaddr *>(&serverAddr),
              sizeof(sockaddr_in))
         < 0) {
-//    if( bind(serverSocketDesc,(struct sockaddr *)&serverAddr ,
-//             sizeof(sockaddr_in))
-//        < 0) {
+
         logMutex.lock();
-        (*logFile)<<getDateFormat()<<"\tERROR\tbind\t"<<errno<<"."<<std::endl;
+        (*logFile) << getDateFormat() << "\tERROR\tbind\t" << errno << "." << std::endl;
         logMutex.unlock();
     }
 
 
     //Listen
-    std::cout<<"listen"<<std::endl; //todo remove
+    std::cout << "listen" << std::endl; //todo remove
     listen(serverSocketDesc, MAX_CONNECTIONS);
 
+
+    struct timeval timeout;
+    timeout.tv_sec = 2;
+    timeout.tv_usec = 0;
+
+    if (setsockopt(serverSocketDesc, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout,
+                   sizeof(timeout)) < 0) {
+    logMutex.lock();
+    (*logFile) << getDateFormat() << "\tERROR\tsetsockopt\t" << errno << "." << std::endl;
+    logMutex.unlock();
+    }
+
+    if (setsockopt (serverSocketDesc, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout,
+                    sizeof(timeout)) < 0) {
+        logMutex.lock();
+        (*logFile) << getDateFormat() << "\tERROR\tsetsockopt\t" << errno << "." << std::endl;
+        logMutex.unlock();
+    }
 
     while (!doExit){
         //Accept
         std::cout<<"accept"<<std::endl; //todo remove
         int clientSocketDesc = accept(serverSocketDesc, reinterpret_cast<struct sockaddr *>
         (&cliAddr), &addressLength);
-//        clientSocketDesc = accept(serverSocketDesc,
-//                                  (struct sockaddr *) &cliAddr, &addressLength);
+
         if (clientSocketDesc < 0){
             logMutex.lock();
             (*logFile)<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<"."<<std::endl;
@@ -503,6 +510,7 @@ int main(int argc , char *argv[]) {
     for (auto& someThread: threadsDeque){
         someThread.join();
     }
+    exitThread.join();
 
     destruct();
 
