@@ -515,7 +515,6 @@ int main(int argc , char *argv[]) {
     for (auto& someThread: threadsDeque){
         someThread.join();
     }
-//    exitThread.join();
 
     destruct();
 

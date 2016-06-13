@@ -24,5 +24,8 @@ ANSWERS:
     a. Which changes are required in the client side in order to support the new command?
     b. Which changes are required in the server side in order to support the new command?
 
-    A1.a.
-    A1.b. the server should keep the connection alive to every client so it could distribute
+    A1.a. the client should keep the connection alive and
+    A1.b. the server should keep the connection alive (with a thread to each user) to every
+    client so it could distribute the created event to all of the registered users.
+    to keep the parallelism feature each thread that holds the connection to each user can create
+     more threads for each user request.
