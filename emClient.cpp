@@ -70,10 +70,8 @@ const std::string logDateFormat()
     return std::string(date);
 }
 
-void destruct(){
-    int closed = close(clientSocketDesc);
-    std::cout << "closed: " << closed << std::endl; // todo remove
-
+void destruct()
+{
     responseArgsDeque.clear();
     argsDeque.clear();
     logFile->close();
@@ -82,6 +80,15 @@ void destruct(){
 
 void writeToStream()
 {
+    // create socket
+    clientSocketDesc = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocketDesc < 0){
+        (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<"."<<std::endl;
+        destruct();
+        exit(EXIT_FAILURE);
+    }
+    std::cout<<"socket created"<<std::endl; //todo remove
+
     // connect to server
     int connected = connect(clientSocketDesc,
             reinterpret_cast<struct sockaddr *>(&serverAddr),
@@ -111,10 +118,17 @@ void readFromStream(){
 
     if (read(clientSocketDesc, buff, MAX_BUFFER_LENGTH) < 0){
         (*logFile)<<getDateFormat()<<"\tERROR\tread\t"<<errno<<"."<<std::endl;
+        int close(clientSocketDesc);
         destruct();
         exit(EXIT_FAILURE);
     }
+
     int closed = close(clientSocketDesc);
+    if (closed < 0)
+    {
+        (*logFile)<<getDateFormat()<<"\tERROR\tclose\t"<<errno<<"."<<std::endl;
+    }
+
     std::cout << "closed socket after read: " << closed << std::endl; // todo remove
 }
 
@@ -369,15 +383,6 @@ int main(int argc , char *argv[])
     dontExit = true;
 
     while (dontExit){
-        // create socket
-        clientSocketDesc = socket(AF_INET, SOCK_STREAM, 0);
-        if (clientSocketDesc < 0){
-            (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<"."<<std::endl;
-            destruct();
-            exit(EXIT_FAILURE);
-        }
-        std::cout<<"socket created"<<std::endl; //todo remove
-
         std::cout << "waiting for input" << std::endl; //todo remove
         msgToServer.clear();
         argsDeque.clear();
