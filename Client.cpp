@@ -342,11 +342,14 @@ int main(int argc , char *argv[])
     port = atoi(argv[3]); // todo vrify in range 0 to 65535
 
     logFile = new std::ofstream;
-    std::string logName = std::string(clientName).append("_").append(
-            logDateFormat()).append(".log");
+//    std::string logName = std::string(clientName).append("_").append( // todo uncomment
+//            logDateFormat()).append(".log");
+
+    std::string logName = "emClient.log"; // todo remove
 
     // open logfile and append
-    (*logFile).open(logName.c_str(), std::ios_base::app);
+//    (*logFile).open(logName.c_str(), std::ios_base::app); // todo uncomment
+    (*logFile).open(logName.c_str()); // todo remove
 
     if (serverIP == NULL){
         (*logFile)<<getDateFormat()<<"\tERROR\tgethostbyname\t"<<errno<<"."<<std::endl;
@@ -381,10 +384,10 @@ int main(int argc , char *argv[])
 
         memset(buff, 0, MAX_BUFFER_LENGTH);
 
-//        std::cin.get(buff, MAX_BUFFER_LENGTH); // todo remove if not needed
-//        std::cin.ignore();
+        std::cin.get(buff, MAX_BUFFER_LENGTH); // todo remove if not needed
+        std::cin.ignore();
 
-        std::cin >> buff; // todo verify input length / test with large input
+//        std::cin >> buff; // todo verify input length / test with large input
 
         parseUserInput();
     }
