@@ -87,7 +87,12 @@ void putBufferInArgsDeque(std::deque<std::string>& argsDeque, char * buff){
 
 void destruct(){
 
-    close(serverSocketDesc);
+    int ret = close(serverSocketDesc);
+    if (ret < 0) {
+        logMutex.lock();
+        (*logFile) << getDateFormat() << "\tERROR\tclose\t" << errno << "." << std::endl;
+        logMutex.unlock();
+    }
     newestEvents.clear();
     for (auto& kv: eventIdToEvent){
         delete(kv.second);
@@ -411,7 +416,12 @@ void readAndWriteToStream(int clientSocketDesc){
         logMutex.unlock();
 
     }
-    close(clientSocketDesc);
+    int ret = close(clientSocketDesc);
+    if (ret < 0) {
+        logMutex.lock();
+        (*logFile) << getDateFormat() << "\tERROR\tclose\t" << errno << "." << std::endl;
+        logMutex.unlock();
+    }
 }
 
 
