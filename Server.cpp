@@ -112,7 +112,7 @@ void destruct(){
 }
 
 void waitForExit(){
-    std::cout<<"in exit thread"<<std::endl; //todo remove
+    std::cout<<"in waitForExit"<<std::endl; //todo remove
     std::string buffStr;
     std::deque<std::string> exitArgsDeque;
 
@@ -122,7 +122,7 @@ void waitForExit(){
         std::cin>>buffStr;
 
         while (buffStr.length()){
-            std::cout<<"in inner while of exit thread"<<std::endl; //todo remove
+            std::cout<<"in inner while of waitForExit"<<std::endl; //todo remove
             std::size_t firstSpaceIdx = buffStr.find(" ");
             exitArgsDeque.push_back(buffStr.substr(0, firstSpaceIdx));
             if (firstSpaceIdx == std::string::npos){ // no match
@@ -137,7 +137,7 @@ void waitForExit(){
 
         if (exitArgsDeque.size() == 1 && exitArgsDeque[0].
                 compare("EXIT") == 0){
-            std::cout<<"in if of exit thread"<<std::endl; //todo remove
+            std::cout<<"in if of waitForExit"<<std::endl; //todo remove
             exitArgsDeque.clear();
             logMutex.lock();
             (*logFile)<<"EXIT command is typed: server is shutdown"<<std::endl;
@@ -438,8 +438,8 @@ int main(int argc , char *argv[]) {
     serverAddr.sin_port = htons((uint16_t) port);
 
     // create a thread that will listen for the exit cmd on the server keyboard
-    std::cout << "exit thread created" << std::endl; //todo remove
-    std::thread exitThread = std::thread(waitForExit);
+//    std::cout << "exit thread created" << std::endl; //todo remove
+//    std::thread exitThread = std::thread(waitForExit);
 
 
 
@@ -469,40 +469,45 @@ int main(int argc , char *argv[]) {
     std::cout << "listen" << std::endl; //todo remove
     listen(serverSocketDesc, MAX_CONNECTIONS);
 
+    fd_set allClientsFds, readFds;
 
-    struct timeval timeout;
-    timeout.tv_sec = 2;
-    timeout.tv_usec = 0;
-
-    if (setsockopt(serverSocketDesc, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout,
-                   sizeof(timeout)) < 0) {
-    logMutex.lock();
-    (*logFile) << getDateFormat() << "\tERROR\tsetsockopt\t" << errno << "." << std::endl;
-    logMutex.unlock();
-    }
-
-    if (setsockopt (serverSocketDesc, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout,
-                    sizeof(timeout)) < 0) {
-        logMutex.lock();
-        (*logFile) << getDateFormat() << "\tERROR\tsetsockopt\t" << errno << "." << std::endl;
-        logMutex.unlock();
-    }
+    FD_ZERO(&allClientsFds);
+    FD_ZERO(&readFds);
+    FD_SET(serverSocketDesc, &allClientsFds);
+    FD_SET(STDIN_FILENO, &allClientsFds);
 
     while (!doExit){
-        //Accept
-        std::cout<<"accept"<<std::endl; //todo remove
-        int clientSocketDesc = accept(serverSocketDesc, reinterpret_cast<struct sockaddr *>
-        (&cliAddr), &addressLength);
+        readFds = allClientsFds;
 
-        if (clientSocketDesc < 0){
+        if (select(MAX_CONNECTIONS + 1, &readFds, NULL, NULL, NULL) < 0){
             logMutex.lock();
-            (*logFile)<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<"."<<std::endl;
+            (*logFile)<<getDateFormat()<<"\tERROR\tselect\t"<<errno<<"."<<std::endl;
             logMutex.unlock();
         }
-        //create a thread with the readAndWriteToStream function
-        // and push it into the deque
-        std::cout<<"create connection thread"<<std::endl; //todo remove
-        threadsDeque.push_front(std::thread(readAndWriteToStream, clientSocketDesc));
+        else if (FD_ISSET(serverSocketDesc, &readFds)){
+            //Accept
+            std::cout<<"accept"<<std::endl; //todo remove
+            int clientSocketDesc = accept(serverSocketDesc, reinterpret_cast<struct sockaddr *>
+            (&cliAddr), &addressLength);
+
+            if (clientSocketDesc < 0){
+                logMutex.lock();
+                (*logFile)<<getDateFormat()<<"\tERROR\taccept\t"<<errno<<"."<<std::endl;
+                logMutex.unlock();
+            }
+            //create a thread with the readAndWriteToStream function
+            // and push it into the deque
+            std::cout<<"create connection thread"<<std::endl; //todo remove
+            threadsDeque.push_front(std::thread(readAndWriteToStream, clientSocketDesc));
+        }
+        else if (FD_ISSET(STDIN_FILENO, &readFds)){
+            waitForExit();
+        }
+        else{
+            std::cout<<"-----------------------in the else of the main while loop!! "
+                    "-----------------------"<<std::endl;
+            //todo remove
+        }
     }
 
     //wait for the requests to finish their run
@@ -510,7 +515,7 @@ int main(int argc , char *argv[]) {
     for (auto& someThread: threadsDeque){
         someThread.join();
     }
-    exitThread.join();
+//    exitThread.join();
 
     destruct();
 
