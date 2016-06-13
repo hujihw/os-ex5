@@ -1,0 +1,28 @@
+omri.kaplan, etzion.asaf
+omri kaplan (20043895), asaf etzion (20020272)
+EX: 4
+
+FILES:
+emServer.cpp- the server side of the exercise.
+emClient.cpp- the client side of the exercise.
+Makefile- compiles emServer.cpp and emClient.cpp,
+		    creates the execution files- emServer and emClient,
+			creates a tar.
+README- this file.
+
+REMARKS:
+    we created two files emServer.cpp and emClient.cpp one for each side.
+    we chose to connect the socket for each request from the client.
+    we created global data structures: a deque for holding the latest events, a map that maps an
+    event id to the event (a struct we created), a map that maps an event id to the set of
+    users id's who are RSVP to that event, a map that maps a user id to the set of event he is
+    RSVP to. thus enabling the server to handle requests in very good performance.
+
+ANSWERS:
+    Q1.You are required to add one more command: “Create and Distribute” – after creating a new
+      event, the server is required to distribute the event to all registered clients.
+    a. Which changes are required in the client side in order to support the new command?
+    b. Which changes are required in the server side in order to support the new command?
+
+    A1.a.
+    A1.b. the server should keep the connection alive to every client so it could distribute
