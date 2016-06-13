@@ -22,6 +22,7 @@
 std::ofstream* logFile;
 int port;
 struct hostent *serverIP;
+struct sockaddr_in serverAddr;
 std::string clientName;
 std::string msgToServer;
 char buff[MAX_BUFFER_LENGTH];
@@ -77,11 +78,17 @@ void destruct(){
     delete(logFile);
 }
 
-void writeToStream(){
+void writeToStream()
+{
     // connect to server
-    if (connect(clientSocketDesc, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(sockaddr_in)) < 0) // todo get serverAddr
+    int connected = connect(clientSocketDesc,
+            reinterpret_cast<struct sockaddr *>(&serverAddr),
+            sizeof(sockaddr_in));
+    std::cout << "connected: " << connected << std::endl;
+    if (connected < 0)
     {
-        (*logFile)<<getDateFormat()<<"\tERROR\tconnect\t"<<errno<<"."<<std::endl;
+        (*logFile) << getDateFormat() << "\tERROR\tconnect\t" <<
+                errno << "." << std::endl;
         destruct();
         exit(EXIT_FAILURE);
     }
@@ -344,8 +351,6 @@ int main(int argc , char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in serverAddr;
-
     memset((char *) &serverAddr, 0, sizeof(sockaddr_in));
 
     serverAddr.sin_family = AF_INET;
@@ -355,7 +360,6 @@ int main(int argc , char *argv[])
 
     msgToServer = "";
     registered = false;
-//    idle = true;
     dontExit = true;
 
     // create socket
@@ -377,7 +381,7 @@ int main(int argc , char *argv[])
 //        std::cin.get(buff, MAX_BUFFER_LENGTH); // todo remove if not needed
 //        std::cin.ignore();
 
-        std::cin >> buff; // todo verify input length
+        std::cin >> buff; // todo verify input length / test with large input
 
         parseUserInput();
     }
