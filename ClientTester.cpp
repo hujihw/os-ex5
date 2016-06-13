@@ -13,7 +13,7 @@
 std::ofstream *logFile;
 int testerSocketFD, commandSocketFD;
 struct sockaddr_in testerAddr, cliAddr;
-int port = 8875;
+int port = 8080;
 char buff[MAX_BUFFER_LENGTH];
 
 

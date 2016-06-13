@@ -71,7 +71,9 @@ const std::string logDateFormat()
 }
 
 void destruct(){
-    close(clientSocketDesc);
+    int closed = close(clientSocketDesc);
+    std::cout << "closed: " << closed << std::endl; // todo remove
+
     responseArgsDeque.clear();
     argsDeque.clear();
     logFile->close();
@@ -112,7 +114,8 @@ void readFromStream(){
         destruct();
         exit(EXIT_FAILURE);
     }
-
+    int closed = close(clientSocketDesc);
+    std::cout << "closed socket after read: " << closed << std::endl; // todo remove
 }
 
 void parseResponse(){
@@ -386,7 +389,6 @@ int main(int argc , char *argv[])
         parseUserInput();
     }
 
-    close(clientSocketDesc);
     (*logFile).close();
 
     return 0;
