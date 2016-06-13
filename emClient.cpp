@@ -146,8 +146,8 @@ void parseResponse(){
     }
 }
 
-void parseUserInput(){
-
+void parseUserInput()
+{
     responseArgsDeque.clear();
     msgToServer.append(buff);
 
@@ -168,8 +168,8 @@ void parseUserInput(){
             return; //todo check
         }
         if (registered){
-            destruct();
-            exit(EXIT_FAILURE);
+//            destruct();
+//            exit(EXIT_FAILURE);
         }
         registered = true;
 
@@ -188,10 +188,10 @@ void parseUserInput(){
         std::cout<<"parse: create"<<std::endl; //todo remove
 
         if(argsDeque.size() < 4){
-            (*logFile)<<"ERROR: missing arguments in command CREATE."<<std::endl;
+            (*logFile) << "ERROR: missing arguments in command CREATE." << std::endl;
             return;
         }
-        if (argsDeque.size() > 4){
+        if (argsDeque.size() > 4){ // todo check if needed
             for (size_t i = 4; i < argsDeque.size(); i++){
                 (*logFile)<<"ERROR: invalid argument "<<
                         argsDeque[i]<<" in command CREATE."<<std::endl;
