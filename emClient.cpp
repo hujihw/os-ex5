@@ -368,16 +368,16 @@ int main(int argc , char *argv[])
     registered = false;
     dontExit = true;
 
-    // create socket
-    clientSocketDesc = socket(AF_INET, SOCK_STREAM, 0);
-    if (clientSocketDesc < 0){
-        (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<"."<<std::endl;
-        destruct();
-        exit(EXIT_FAILURE);
-    }
-    std::cout<<"socket created"<<std::endl; //todo remove
-
     while (dontExit){
+        // create socket
+        clientSocketDesc = socket(AF_INET, SOCK_STREAM, 0);
+        if (clientSocketDesc < 0){
+            (*logFile)<<getDateFormat()<<"\tERROR\tsocket\t"<<errno<<"."<<std::endl;
+            destruct();
+            exit(EXIT_FAILURE);
+        }
+        std::cout<<"socket created"<<std::endl; //todo remove
+
         std::cout << "waiting for input" << std::endl; //todo remove
         msgToServer.clear();
         argsDeque.clear();
@@ -386,8 +386,6 @@ int main(int argc , char *argv[])
 
         std::cin.get(buff, MAX_BUFFER_LENGTH); // todo remove if not needed
         std::cin.ignore();
-
-//        std::cin >> buff; // todo verify input length / test with large input
 
         parseUserInput();
     }
