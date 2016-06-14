@@ -19,6 +19,8 @@
 #define MAX_BUFFER_LENGTH 3250
 #define SUCCESS 0;
 #define FAILURE -1;
+#define MIN_PORT_NUM 1
+#define MAX_PORT_NUM 65535
 
 // global variables
 std::ofstream* logFile;
@@ -44,8 +46,7 @@ void putBufferInArgsDeque()
     {
         size_t currSpaceIdx = buffStr.find(" ");
         argsDeque.push_back(buffStr.substr(0, currSpaceIdx));
-        buffStr = buffStr.substr(currSpaceIdx + 1); //todo check if works-correct
-        std::cout << "buffStr: " << buffStr << std::endl; // todo remove
+        buffStr = buffStr.substr(currSpaceIdx + 1);
         if (currSpaceIdx == std::string::npos){ // mo matches
             break;
         }
@@ -53,7 +54,6 @@ void putBufferInArgsDeque()
 
     if (argsDeque.size() == 3)
     {
-        std::cout << "adding event desc, buffStr: " << buffStr << std::endl; // todo remove
         argsDeque.push_back(buffStr);
     }
 
@@ -63,7 +63,7 @@ void putBufferInArgsDeque()
 }
 
 const std::string getDateFormat()
-{ //todo move to aux file
+{
     time_t time;
     char date[80];
     std::time(&time);
@@ -99,13 +99,11 @@ void writeToStream()
         destruct();
         exit(EXIT_FAILURE);
     }
-    std::cout<<"socket created"<<std::endl; //todo remove
 
     // connect to server
     int connected = connect(clientSocketDesc,
             reinterpret_cast<struct sockaddr *>(&serverAddr),
             sizeof(sockaddr_in));
-    std::cout << "connected: " << connected << std::endl;
     if (connected < 0)
     {
         (*logFile) << getDateFormat() << "\tERROR\tconnect\t" <<
@@ -113,7 +111,6 @@ void writeToStream()
         destruct();
         exit(EXIT_FAILURE);
     }
-    std::cout<<"connected successfully"<<std::endl; //todo remove
 
     // write command to stream
     if (write(clientSocketDesc, msgToServer.c_str(), msgToServer.length()) < 0){
@@ -121,11 +118,9 @@ void writeToStream()
         destruct();
         exit(EXIT_FAILURE);
     }
-    std::cout<<"parse: write to stream - success"<<std::endl; //todo remove
 }
 
 void readFromStream(){
-    std::cout<<"parse: read from stream"<<std::endl; //todo remove
     memset(buff, 0, MAX_BUFFER_LENGTH);
 
     if (read(clientSocketDesc, buff, MAX_BUFFER_LENGTH) < 0){
@@ -145,13 +140,10 @@ void readFromStream(){
     {
         (*logFile)<<getDateFormat()<<"\tERROR\tclose\t"<<errno<<"."<<std::endl;
     }
-
-    std::cout << "closed socket after read: " << closed << std::endl; // todo remove
 }
 
 void parseResponse()
 {
-    std::cout<<"parse: parse response"<<std::endl; //todo remove
     std::string buffStr(buff);
 
     while (buffStr.length()) {
@@ -208,7 +200,6 @@ void parseUserInput()
     std::string command = argsDeque[0];
 
     if (command == "REGISTER"){
-        std::cout<<"parse: register"<<std::endl; //todo remove
         if (verifyArgNum(1, "REGISTER"))
             return;
         if (!registered)
@@ -240,12 +231,10 @@ void parseUserInput()
         }
     }
     else if (command == "CREATE"){
-        std::cout<<"parse: create"<<std::endl; //todo remove
 
         if(verifyArgNum(4, "CREATE")){
             return;
         }
-        std::cout << "arg4: " << argsDeque[3] << std::endl; // todo remove
         if (!registered){
             (*logFile) << getDateFormat()
                 << "\tERROR: first command must be: REGISTER." << std::endl;
@@ -259,7 +248,6 @@ void parseUserInput()
 
     }
     else if (command == "GET_TOP_5"){
-        std::cout<<"parse: get top 5"<<std::endl; //todo remove
         if(verifyArgNum(1, "GET_TOP_5"))
         {
             return;
@@ -280,7 +268,6 @@ void parseUserInput()
         }
     }
     else if (command == "SEND_RSVP"){
-        std::cout<<"parse: send rsvp"<<std::endl; //todo remove
         if(verifyArgNum(2, "SEND_RSVP"))
         {
             return;
@@ -301,7 +288,6 @@ void parseUserInput()
         (*logFile)<<getDateFormat()<<"\t"<<responseArgsDeque[1]<< std::endl;
     }
     else if (command == "GET_RSVPS_LIST"){
-        std::cout<<"parse: get rsvps list"<<std::endl; //todo remove
         if (verifyArgNum(2, "GET_RSVPS_LIST"))
         {
             return;
@@ -326,7 +312,7 @@ void parseUserInput()
             << "\t" << responseArgsDeque[1] << std::endl;
     }
     else if (command == "UNREGISTER"){
-        std::cout<<"parse: unregister"<<std::endl; //todo remove
+
         if (verifyArgNum(1, "UNREGISTER"))
         {
             return;
@@ -343,7 +329,7 @@ void parseUserInput()
 
         (*logFile)<<getDateFormat()<<"\t"<<responseArgsDeque[1]<<std::endl;
 
-        if (!responseArgsDeque[0].compare("GOOD")){ //todo check this
+        if (!responseArgsDeque[0].compare("GOOD")){
             destruct();
             exit(EXIT_SUCCESS);
         }
@@ -352,7 +338,6 @@ void parseUserInput()
     }
     else
     {
-        std::cout<<"parse: illegal"<<std::endl; //todo remove
         (*logFile) << getDateFormat() << "\t"
         << "ERROR: illegal command." << std::endl;
     }
@@ -360,7 +345,7 @@ void parseUserInput()
 
 int main(int argc , char *argv[])
 {
-    if(argc != NUMBER_OF_ARGS){ // todo add checks for usage
+    if(argc != NUMBER_OF_ARGS || MIN_PORT_NUM > atoi(argv[3]) || atoi(argv[3]) > MAX_PORT_NUM){
         std::cout<<"Usage: emClient clientName serverAddress "
                 "serverPort"<<std::endl;
         exit(EXIT_FAILURE);
@@ -368,17 +353,16 @@ int main(int argc , char *argv[])
 
     clientName = argv[1];
     serverIP = gethostbyname(argv[2]);
-    port = atoi(argv[3]); // todo vrify in range 0 to 65535
+    port = atoi(argv[3]);
 
-    logFile = new std::ofstream;
-//    std::string logName = std::string(clientName).append("_").append( // todo uncomment
-//            logDateFormat()).append(".log");
 
-    std::string logName = "emClient.log"; // todo remove
 
     // open logfile and append
-//    (*logFile).open(logName.c_str(), std::ios_base::app); // todo uncomment
-    (*logFile).open(logName.c_str()); // todo remove
+    logFile = new std::ofstream;
+    std::string logName = std::string(clientName).append("_").append(
+            logDateFormat()).append(".log");
+    (*logFile).open(logName.c_str(), std::ios_base::app);
+
 
     if (serverIP == NULL){
         (*logFile)<<getDateFormat()<<"\tERROR\tgethostbyname\t"<<errno<<"."<<std::endl;
@@ -398,35 +382,19 @@ int main(int argc , char *argv[])
     dontExit = true;
 
     while (dontExit){
-        std::cout << "waiting for input" << std::endl; //todo remove
         msgToServer.clear();
         argsDeque.clear();
 
         memset(buff, 0, MAX_BUFFER_LENGTH);
 
-//        getline(std::cin, buffStr); // todo fix empty line
-//
-//        memcpy(buff, buffStr.c_str(), buffStr.length());
-
-        std::cin.get(buff, MAX_BUFFER_LENGTH); // todo remove if not needed
+        std::cin.get(buff, MAX_BUFFER_LENGTH);
         std::cin.ignore();
 
         parseUserInput();
 
-//        if (!(buffStr.empty())) // todo fix empty line
-//        {
-//            parseUserInput();
-//        }
-//        else
-//        {
-//            (*logFile) << getDateFormat()
-//                << "\tERROR: illegal command." << std::endl;
-//        }
     }
 
     (*logFile).close();
 
     return 0;
 }
-
-// todo: for every function verify number of args, only space deliminator, verify arg type
