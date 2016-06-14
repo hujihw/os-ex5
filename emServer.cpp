@@ -316,8 +316,8 @@ std::string parseUserInput(char * buff){
             return msgToClient;
         }
 
-        msgToClient.append("GOOD$");
         if (eventIdRSVPList.find(eventId) != eventIdRSVPList.end()){
+            msgToClient.append("GOOD$");
             msgToClient.append("The RSVP’s list for event id ")
                     .append(std::to_string(eventId)).append(" is: ");
             size_t i = 0;
@@ -329,13 +329,21 @@ std::string parseUserInput(char * buff){
                 msgToClient.append(new_client_name).append(",");
                 i++;
             }
+            dastLock.unlock();
+            logMutex.lock();
+            (*logFile)<<getDateFormat()<<"\t"<<clientName<<
+            "\trequests the RSVP’s list for event with id "<<
+            eventId<<"."<<std::endl;
+            logMutex.unlock();
+        } else{
+            msgToClient.append("ERROR$").append("ERROR\tparseUserInput\tthe event does not exists"
+                                                        ".");
+            logMutex.lock();
+            (*logFile)<<getDateFormat()<<
+            "\tparseUserInput\tthe event does not exists."<<std::endl;
+            logMutex.unlock();
         }
-        dastLock.unlock();
-        logMutex.lock();
-        (*logFile)<<getDateFormat()<<"\t"<<clientName<<
-        "\trequests the RSVP’s list for event with id "<<
-        eventId<<"."<<std::endl;
-        logMutex.unlock();
+
 
     }
     else if (command == "UNREGISTER"){
