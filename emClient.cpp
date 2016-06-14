@@ -235,8 +235,8 @@ void parseUserInput()
             return;
         }
         if (!registered) {
-            (*logFile) << getDateFormat() << "ERROR: first command must be:"
-                    " REGISTER."<<std::endl;
+            (*logFile) << getDateFormat()
+            << "\tERROR: first command must be: REGISTER." << std::endl;
             return;
         }
 
@@ -266,8 +266,8 @@ void parseUserInput()
             return;
         }
         if (!registered){
-            (*logFile)<<getDateFormat()<<"ERROR: first command must be:"
-                                                 " REGISTER."<<std::endl;
+            (*logFile) << getDateFormat()
+            << "\tERROR: first command must be: REGISTER." << std::endl;
             return;
         }
 
@@ -275,9 +275,8 @@ void parseUserInput()
         if (std::transform(argsDeque[1].begin(), argsDeque[1].end(),
                            argsDeque[1].begin(), ::isdigit)
                                                 != argsDeque[1].end()){
-            (*logFile)<<getDateFormat()<<"\t"<<
-            				"ERROR: invalid argument "<<
-            				argsDeque[1]<<" in command GET_RSVP_LIST."<<std::endl;
+            (*logFile)<<getDateFormat()<< "\tERROR: invalid argument "
+                << argsDeque[1]<<" in command GET_RSVPS_LIST."<<std::endl;
             //todo check spacing
         }
         writeToStream();
@@ -290,14 +289,14 @@ void parseUserInput()
         std::cout<<"parse: get rsvps list"<<std::endl; //todo remove
         if(argsDeque.size() <  2){
             (*logFile)<<getDateFormat()<<"\t"<<
-            "ERROR: missing arguments in command GET_RSVP_LIST."<<std::endl;
+            "ERROR: missing arguments in command GET_RSVPS_LIST."<<std::endl;
             return;
         }
         if (argsDeque.size() > 2){
             for (size_t i = 2; i < argsDeque.size(); i++){
                 (*logFile)<<getDateFormat()<<"\t"<<
                 "ERROR: invalid argument "<<
-                        argsDeque[i]<< "in command GET_RSVP_LIST."<<std::endl;
+                        argsDeque[i]<< "in command GET_RSVPS_LIST."<<std::endl;
             }
             return;
         }
@@ -306,7 +305,7 @@ void parseUserInput()
                 argsDeque[1].begin(), ::isdigit) != argsDeque[1].end()){
             (*logFile)<<getDateFormat()<<"\t"<<
             				"ERROR: invalid argument " <<
-            				argsDeque[1]<<" in command GET_RSVP_LIST."<<std::endl;
+            				argsDeque[1]<<" in command GET_RSVPS_LIST."<<std::endl;
         }
         if (!registered){
             (*logFile)<<getDateFormat()<<"\t"<<
@@ -351,11 +350,12 @@ void parseUserInput()
         return;
 
     }
-    else{
+    else
+    {
         std::cout<<"parse: illegal"<<std::endl; //todo remove
-        (*logFile)<<getDateFormat()<<"\t"<<"ERROR: illegal command."<<std::endl;
+        (*logFile) << getDateFormat() << "\t"
+        << "ERROR: illegal command." << std::endl;
     }
-
 }
 
 int main(int argc , char *argv[])
@@ -404,10 +404,24 @@ int main(int argc , char *argv[])
 
         memset(buff, 0, MAX_BUFFER_LENGTH);
 
+//        getline(std::cin, buffStr); // todo fix empty line
+//
+//        memcpy(buff, buffStr.c_str(), buffStr.length());
+
         std::cin.get(buff, MAX_BUFFER_LENGTH); // todo remove if not needed
         std::cin.ignore();
 
         parseUserInput();
+
+//        if (!(buffStr.empty())) // todo fix empty line
+//        {
+//            parseUserInput();
+//        }
+//        else
+//        {
+//            (*logFile) << getDateFormat()
+//                << "\tERROR: illegal command." << std::endl;
+//        }
     }
 
     (*logFile).close();
