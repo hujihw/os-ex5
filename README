@@ -24,8 +24,41 @@ ANSWERS:
     a. Which changes are required in the client side in order to support the new command?
     b. Which changes are required in the server side in order to support the new command?
 
-    A1.a. the client should keep the connection alive and
-    A1.b. the server should keep the connection alive (with a thread to each user) to every
-    client so it could distribute the created event to all of the registered users.
-    to keep the parallelism feature each thread that holds the connection to each user can create
-     more threads for each user request.
+    A1.a. the client should have an open connection to the server on a separated
+    thread, where distributed events could be processed. This enable sending
+    commands from the client to the server in parallel with the main thread.
+
+    A1.b. the server should keep the connection alive (with a thread to each
+    user) to every client so it could distribute the created event to all of the
+    registered users. to keep the parallelism feature each thread that holds the
+    connection to each user can create more threads for each user request.
+
+    Q2. Why do we prefer TCP over UDP in this exercise?
+
+    Because TCP has few notable benefits over UDP:
+        - reliable
+        - connection oriented
+        - takes care of lost/corrupted packets
+    while UDP does not supply those features, that are needed in this exercise.
+
+    Q3. Give two examples of applications that use UDP. Why UDP is preferred
+        for them?
+
+    Application examples:
+        - VOIP
+        - Gaming
+    In both cases low latency is crucial for the applications to be relevant.
+
+    Q4. In this exercise, in case of a server crash all the data
+    is lost (we say that the server is a single point of failure). Describe
+    high level design for a system that is able to recover from failures (we
+    allow some of the data to be lost).
+
+    A simple solution will be that every client saves locally the data it sends
+    to the server. That way, we have all the information distributed between all
+    the clients that were connected and sent data. The data can be recovered by
+    collecting the data from all of the clients.
+    Another option that is safer an more complicated, could be to send the data
+    from the server to all of the clients. That way, we will need only one
+    client that was up to date when the server fell, in order to recover the
+    system.
